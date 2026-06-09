@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @fizioterapi/db prisma:generate && pnpm --filter @fizioterapi/types build && pnpm --filter @fizioterapi/db build && pnpm --filter @fizioterapi/api build"
+buildCommand = "pnpm install --frozen-lockfile && pnpm railway:build"
 
 [deploy]
 startCommand = "pnpm --filter @fizioterapi/db prisma:migrate-deploy && node apps/api/dist/main.js"
