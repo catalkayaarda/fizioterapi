@@ -1,0 +1,312 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PATIENT
+  THERAPIST
+  ADMIN
+}
+
+enum TherapistStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DocumentType {
+  DIPLOMA
+  LICENSE
+}
+
+enum PackageMode {
+  PHYSICAL
+  ONLINE
+  BOTH
+}
+
+enum AvailabilityStatus {
+  OPEN
+  PENDING
+  BOOKED
+  CLOSED
+}
+
+enum AppointmentStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum CancelledBy {
+  PATIENT
+  THERAPIST
+  SYSTEM
+}
+
+enum LoyaltyTier {
+  BRONZE
+  SILVER
+  GOLD
+  VIP
+}
+
+model User {
+  id               String            @id @default(cuid())
+  email            String            @unique
+  passwordHash     String
+  name             String
+  role             Role              @default(PATIENT)
+  therapistProfile TherapistProfile?
+  patientAppointments Appointment[] @relation("PatientAppointments")
+  cancellationCredits Int @default(1)
+  completedAppointments Int @default(0)
+  loyaltyTier LoyaltyTier @default(BRONZE)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([role])
+}
+
+model TherapistProfile {
+  id              String              @id @default(cuid())
+  userId          String              @unique
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName        String
+  title           String?
+  bio             String?
+  city            String?
+  status          TherapistStatus     @default(PENDING)
+  rejectionReason String?
+  reviewedAt      DateTime?
+  documents       TherapistDocument[]
+  specialties     TherapistSpecialty[]
+  packages        TherapistPackage[]
+  appointments    Appointment[]
+  availability    AvailabilitySlot[]
+  reviews         TherapistReview[]
+  tier            Int                 @default(0)
+  loyaltyTier     LoyaltyTier         @default(BRONZE)
+  completedAppointments Int           @default(0)
+  commissionRate  Decimal             @default(0.20) @db.Decimal(5, 4)
+  iyzicoSubMerchantId String?
+  penaltyCount    Int                 @default(0)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([status])
+}
+
+model TreatmentType {
+  id              String               @id @default(cuid())
+  slug            String               @unique
+  name            String               @unique
+  description     String?
+  specialties     TherapistSpecialty[]
+  packages        TherapistPackage[]
+  assessmentRules AssessmentRule[]
+  assessmentResults AssessmentResult[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+}
+
+model TherapistDocument {
+  id                 String           @id @default(cuid())
+  therapistProfileId String
+  therapistProfile   TherapistProfile @relation(fields: [therapistProfileId], references: [id], onDelete: Cascade)
+  type               DocumentType
+  fileUrl            String
+  originalName       String
+  mimeType           String
+  createdAt          DateTime         @default(now())
+
+  @@index([therapistProfileId])
+}
+
+model TherapistSpecialty {
+  id                 String           @id @default(cuid())
+  therapistProfileId String
+  therapistProfile   TherapistProfile @relation(fields: [therapistProfileId], references: [id], onDelete: Cascade)
+  treatmentTypeId    String
+  treatmentType      TreatmentType    @relation(fields: [treatmentTypeId], references: [id], onDelete: Cascade)
+  createdAt          DateTime         @default(now())
+
+  @@unique([therapistProfileId, treatmentTypeId])
+  @@index([treatmentTypeId])
+}
+
+model TherapistPackage {
+  id                 String           @id @default(cuid())
+  therapistProfileId String
+  therapistProfile   TherapistProfile @relation(fields: [therapistProfileId], references: [id], onDelete: Cascade)
+  treatmentTypeId    String
+  treatmentType      TreatmentType    @relation(fields: [treatmentTypeId], references: [id], onDelete: Restrict)
+  name               String
+  sessionCount       Int
+  price              Decimal          @db.Decimal(10, 2)
+  mode               PackageMode
+  appointments       Appointment[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([therapistProfileId])
+  @@index([treatmentTypeId])
+}
+
+model AvailabilitySlot {
+  id                 String             @id @default(cuid())
+  therapistProfileId String
+  therapistProfile   TherapistProfile   @relation(fields: [therapistProfileId], references: [id], onDelete: Cascade)
+  startsAt           DateTime
+  endsAt             DateTime
+  status             AvailabilityStatus @default(OPEN)
+  appointment        Appointment?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([therapistProfileId, startsAt])
+  @@index([status])
+}
+
+model Appointment {
+  id                 String            @id @default(cuid())
+  patientId          String
+  patient            User              @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Cascade)
+  therapistProfileId String
+  therapistProfile   TherapistProfile  @relation(fields: [therapistProfileId], references: [id], onDelete: Cascade)
+  packageId          String
+  package            TherapistPackage  @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  slotId             String            @unique
+  slot               AvailabilitySlot  @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  status             AppointmentStatus @default(REQUESTED)
+  videoLink          String?
+  autoExpireAt       DateTime
+  cancelledBy        CancelledBy?
+  cancellationReason String?
+  confirmedAt        DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  createdAt          DateTime          @default(now())
+  payment            Payment?
+  updatedAt          DateTime          @updatedAt
+
+  @@index([patientId])
+  @@index([therapistProfileId])
+  @@index([status, autoExpireAt])
+}
+
+enum PaymentStatus {
+  HELD
+  RELEASED
+  REFUNDED
+  FAILED
+}
+
+enum PaymentEventType {
+  CHARGE_HELD
+  RELEASED
+  REFUNDED
+  WEBHOOK
+}
+
+model Payment {
+  id                   String       @id @default(cuid())
+  appointmentId        String       @unique
+  appointment          Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  status               PaymentStatus
+  amount               Decimal      @db.Decimal(10, 2)
+  originalAmount       Decimal      @default(0) @db.Decimal(10, 2)
+  discountAmount       Decimal      @default(0) @db.Decimal(10, 2)
+  discountRate         Decimal      @default(0) @db.Decimal(5, 4)
+  commission           Decimal      @db.Decimal(10, 2)
+  therapistPayout      Decimal      @db.Decimal(10, 2)
+  iyzicoPaymentId      String?      @unique
+  iyzicoConversationId String?      @unique
+  refundId             String?
+  releasedAt           DateTime?
+  refundedAt           DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  events               PaymentEvent[]
+}
+
+model PaymentEvent {
+  id             String           @id @default(cuid())
+  paymentId      String?
+  payment        Payment?         @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  type           PaymentEventType
+  idempotencyKey String           @unique
+  providerEventId String?
+  payload        Json
+  createdAt      DateTime         @default(now())
+
+  @@index([paymentId])
+  @@index([providerEventId])
+}
+
+model TherapistReview {
+  id                 String           @id @default(cuid())
+  therapistProfileId String
+  therapistProfile   TherapistProfile @relation(fields: [therapistProfileId], references: [id], onDelete: Cascade)
+  rating             Int
+  comment            String?
+  authorName         String?
+  createdAt          DateTime         @default(now())
+
+  @@index([therapistProfileId])
+}
+
+model AssessmentResult {
+  id                         String        @id @default(cuid())
+  recommendedTreatmentTypeId String?
+  recommendedTreatmentType   TreatmentType? @relation(fields: [recommendedTreatmentTypeId], references: [id], onDelete: SetNull)
+  answers                    Json
+  scores                     Json
+  createdAt                  DateTime      @default(now())
+
+  @@index([recommendedTreatmentTypeId])
+}
+
+model AssessmentQuestion {
+  id        String             @id @default(cuid())
+  key       String             @unique
+  text      String
+  order     Int
+  options   AssessmentOption[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([order])
+}
+
+model AssessmentOption {
+  id         String             @id @default(cuid())
+  questionId String
+  question   AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  value      String
+  label      String
+  rules      AssessmentRule[]
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@unique([questionId, value])
+}
+
+model AssessmentRule {
+  id              String           @id @default(cuid())
+  optionId        String
+  option          AssessmentOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  treatmentTypeId String
+  treatmentType   TreatmentType    @relation(fields: [treatmentTypeId], references: [id], onDelete: Cascade)
+  weight          Int              @default(1)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([optionId, treatmentTypeId])
+}

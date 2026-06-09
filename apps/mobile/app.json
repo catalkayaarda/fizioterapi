@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "FizioTerapi",
+    "slug": "fizioterapi",
+    "scheme": "fizioterapi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-secure-store"
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@fizioterapi/config",
+  "private": true,
+  "version": "0.0.0",
+  "exports": {
+    "./tsconfig/base": "./tsconfig/base.json",
+    "./tsconfig/nest": "./tsconfig/nest.json",
+    "./tsconfig/next": "./tsconfig/next.json",
+    "./eslint/base": "./eslint/base.cjs"
+  }
+}
