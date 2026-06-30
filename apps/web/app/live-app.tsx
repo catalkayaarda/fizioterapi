@@ -1,11 +1,11 @@
 // @ts-nocheck
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Role = "PATIENT" | "THERAPIST" | "ADMIN";
 type Session = { accessToken: string; user: { id: string; email: string; name: string; role: Role } };
-type Tab = "home" | "therapists" | "assessment" | "appointments" | "therapist" | "admin" | "profile";
+type Tab = "home" | "therapists" | "assessment" | "appointments" | "messages" | "therapist" | "admin" | "profile";
 type Toast = { id: number; type: "success" | "error" | "info"; text: string };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -62,6 +62,12 @@ function tierBadge(v: string | number | null | undefined) {
 }
 function avatarGrad(v: string | number | null | undefined) {
   return ({ BRONZE:"from-amber-300 to-amber-100 text-amber-900", SILVER:"from-slate-300 to-slate-100 text-slate-700", GOLD:"from-yellow-300 to-yellow-100 text-yellow-900", VIP:"from-violet-500 to-violet-200 text-white" } as Record<string,string>)[tierKey(v)];
+}
+function convStatusLabel(v: string) {
+  return ({ PENDING: "Onay bekliyor", ACCEPTED: "Aktif", REJECTED: "Reddedildi" } as Record<string,string>)[v] || v;
+}
+function convStatusBadge(v: string) {
+  return ({ PENDING: "border-orange-200 bg-orange-50 text-orange-700", ACCEPTED: "border-green-200 bg-green-50 text-green-700", REJECTED: "border-red-200 bg-red-50 text-red-700" } as Record<string,string>)[v] || "border-gray-200 bg-gray-50 text-gray-600";
 }
 function statusBadge(v: string) {
   const m: Record<string,string> = { REQUESTED:"bg-blue-50 text-blue-700 border-blue-200", CONFIRMED:"bg-teal-50 text-teal-700 border-teal-200", COMPLETED:"bg-green-50 text-green-700 border-green-200", CANCELLED:"bg-red-50 text-red-700 border-red-200", PENDING:"bg-orange-50 text-orange-700 border-orange-200", APPROVED:"bg-green-50 text-green-700 border-green-200", REJECTED:"bg-red-50 text-red-700 border-red-200", HELD:"bg-teal-50 text-teal-700 border-teal-200", RELEASED:"bg-green-50 text-green-700 border-green-200", REFUNDED:"bg-purple-50 text-purple-700 border-purple-200" };
@@ -164,6 +170,9 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
   const [incoming, setIncoming] = useState<any[]>([]);
   const [pendingTherapists, setPendingTherapists] = useState<any[]>([]);
   const [loyalty, setLoyalty] = useState<any | null>(null);
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
 
   function toast(type: Toast["type"], text: string) {
     const id = ++_toastId;
@@ -212,6 +221,14 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
     setPendingTherapists(await request<any[]>("/admin/therapists/pending"));
   }, [request, session]);
 
+  const loadConversations = useCallback(async () => {
+    if (!session || session.user.role === "ADMIN") return [] as any[];
+    const list = await request<any[]>("/conversations");
+    setConversations(list);
+    setUnreadMessages(list.reduce((sum, c: any) => sum + (c.unreadCount || 0), 0));
+    return list;
+  }, [request, session]);
+
   useEffect(() => {
     const raw = localStorage.getItem(SESSION_KEY);
     if (raw) try { setSession(JSON.parse(raw)); } catch {}
@@ -224,7 +241,16 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
     if (session.user.role === "PATIENT") { loadAppointments().catch(() => {}); request<any>("/users/loyalty").then(setLoyalty).catch(() => {}); }
     if (session.user.role === "THERAPIST") loadTherapistPanel().catch(() => {});
     if (session.user.role === "ADMIN") loadAdminPanel().catch(() => {});
+    if (session.user.role !== "ADMIN") loadConversations().catch(() => {});
   }, [session]);
+
+  useEffect(() => {
+    if (!session || session.user.role === "ADMIN") return;
+    const timer = setInterval(() => {
+      request<{ unreadCount: number }>("/conversations/unread-count").then(r => setUnreadMessages(r.unreadCount)).catch(() => {});
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [session, request]);
 
   function saveSession(next: Session) {
     setSession(next); localStorage.setItem(SESSION_KEY, JSON.stringify(next));
@@ -242,8 +268,8 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
     const base: Array<{ key: Tab; label: string }> = [
       { key: "home", label: "Ana Sayfa" }, { key: "therapists", label: "Terapistler" }, { key: "assessment", label: "Yönlendirme Testi" }
     ];
-    if (session?.user.role === "PATIENT") base.push({ key: "appointments", label: "Randevularım" }, { key: "profile", label: "Profilim" });
-    if (session?.user.role === "THERAPIST") base.push({ key: "therapist", label: "Pro Panel" }, { key: "appointments", label: "Randevularım" });
+    if (session?.user.role === "PATIENT") base.push({ key: "appointments", label: "Randevularım" }, { key: "messages", label: "Mesajlar" }, { key: "profile", label: "Profilim" });
+    if (session?.user.role === "THERAPIST") base.push({ key: "therapist", label: "Pro Panel" }, { key: "appointments", label: "Randevularım" }, { key: "messages", label: "Mesajlar" });
     if (session?.user.role === "ADMIN") base.push({ key: "admin", label: "Yönetim" });
     return base;
   }, [session?.user.role]);
@@ -260,6 +286,7 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
                 className={cls("rounded-lg px-4 py-2 text-sm font-semibold transition", tab === item.key ? "bg-teal-700 text-white" : "text-gray-600 hover:bg-gray-100")}>
                 {item.label}
                 {item.key === "therapist" && incoming.length > 0 && <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] text-white">{incoming.length}</span>}
+                {item.key === "messages" && unreadMessages > 0 && <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] text-white">{unreadMessages}</span>}
               </button>
             ))}
           </nav>
@@ -306,9 +333,10 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
       <main className="mx-auto max-w-7xl px-6 py-8">
         {!session && tab === "profile" ? <AuthSection request={request} saveSession={saveSession} /> : null}
         {tab === "home" ? <HomeSection treatmentTypes={treatmentTypes} therapists={therapists} session={session} loyalty={loyalty} appointments={appointments} openTherapist={id => run("Terapist yükleniyor", () => openTherapist(id))} setTab={setTab} /> : null}
-        {tab === "therapists" ? <TherapistsSection request={request} treatmentTypes={treatmentTypes} therapists={therapists} setTherapists={setTherapists} selectedTherapist={selectedTherapist} setSelectedTherapist={setSelectedTherapist} session={session} run={run} loadAppointments={loadAppointments} setTab={setTab} toast={toast} /> : null}
+        {tab === "therapists" ? <TherapistsSection request={request} treatmentTypes={treatmentTypes} therapists={therapists} setTherapists={setTherapists} selectedTherapist={selectedTherapist} setSelectedTherapist={setSelectedTherapist} session={session} run={run} loadAppointments={loadAppointments} loadConversations={loadConversations} setActiveConversationId={setActiveConversationId} setTab={setTab} toast={toast} /> : null}
         {tab === "assessment" ? <AssessmentSection questions={questions} setQuestions={setQuestions} request={request} result={assessmentResult} setResult={setAssessmentResult} run={run} openTherapist={id => run("Terapist yükleniyor", () => openTherapist(id))} setTab={setTab} /> : null}
         {tab === "appointments" ? <AppointmentsSection session={session} appointments={appointments} run={run} request={request} reload={session?.user.role === "THERAPIST" ? loadTherapistPanel : loadAppointments} /> : null}
+        {tab === "messages" ? <MessagesSection session={session} request={request} conversations={conversations} loadConversations={loadConversations} activeConversationId={activeConversationId} setActiveConversationId={setActiveConversationId} setUnreadMessages={setUnreadMessages} toast={toast} /> : null}
         {tab === "therapist" ? <TherapistProSection session={session} request={request} run={run} treatmentTypes={treatmentTypes} profile={therapistProfile} incoming={incoming} appointments={appointments} reload={loadTherapistPanel} toast={toast} /> : null}
         {tab === "admin" ? <AdminSection session={session} request={request} run={run} pending={pendingTherapists} reload={loadAdminPanel} /> : null}
         {session && tab === "profile" ? <ProfileSection session={session} loyalty={loyalty} setLoyalty={setLoyalty} request={request} run={run} setTab={setTab} /> : null}
@@ -481,7 +509,7 @@ function TherapistCard({ therapist, onOpen }: any) {
 }
 
 // ── Therapists Section ────────────────────────────────────────────────────────
-function TherapistsSection({ request, treatmentTypes, therapists, setTherapists, selectedTherapist, setSelectedTherapist, session, run, loadAppointments, setTab, toast }: any) {
+function TherapistsSection({ request, treatmentTypes, therapists, setTherapists, selectedTherapist, setSelectedTherapist, session, run, loadAppointments, loadConversations, setActiveConversationId, setTab, toast }: any) {
   const [treatmentType, setTreatmentType] = useState(""); const [mode, setMode] = useState(""); const [minPrice, setMinPrice] = useState(""); const [maxPrice, setMaxPrice] = useState("");
   const [selPackage, setSelPackage] = useState(""); const [selSlot, setSelSlot] = useState(""); const [review, setReview] = useState(""); const [rating, setRating] = useState("5");
   const isPatient = session?.user.role === "PATIENT";
@@ -516,7 +544,7 @@ function TherapistsSection({ request, treatmentTypes, therapists, setTherapists,
         </div>
       </div>
       {selectedTherapist && (
-        <TherapistModal therapist={selectedTherapist} session={session} isPatient={isPatient} selPackage={selPackage} setSelPackage={setSelPackage} selSlot={selSlot} setSelSlot={setSelSlot} review={review} setReview={setReview} rating={rating} setRating={setRating} close={() => setSelectedTherapist(null)} run={run} request={request} refresh={() => detail(selectedTherapist.id)} loadAppointments={loadAppointments} setTab={setTab} toast={toast} />
+        <TherapistModal therapist={selectedTherapist} session={session} isPatient={isPatient} selPackage={selPackage} setSelPackage={setSelPackage} selSlot={selSlot} setSelSlot={setSelSlot} review={review} setReview={setReview} rating={rating} setRating={setRating} close={() => setSelectedTherapist(null)} run={run} request={request} refresh={() => detail(selectedTherapist.id)} loadAppointments={loadAppointments} loadConversations={loadConversations} setActiveConversationId={setActiveConversationId} setTab={setTab} toast={toast} />
       )}
     </div>
   );
@@ -555,16 +583,28 @@ function TherapistListRow({ therapist, onOpen }: any) {
   );
 }
 
-function TherapistModal({ therapist, session, isPatient, selPackage, setSelPackage, selSlot, setSelSlot, review, setReview, rating, setRating, close, run, request, refresh, loadAppointments, setTab, toast }: any) {
+function TherapistModal({ therapist, session, isPatient, selPackage, setSelPackage, selSlot, setSelSlot, review, setReview, rating, setRating, close, run, request, refresh, loadAppointments, loadConversations, setActiveConversationId, setTab, toast }: any) {
   const tier = therapist.loyaltyTier || therapist.tier;
   const pkg = therapist.packages?.find((p: any) => p.id === selPackage);
   const slot = therapist.availability?.find((s: any) => s.id === selSlot);
+  const [messageDraft, setMessageDraft] = useState("");
+  const hasPackages = (therapist.packages?.length || 0) > 0;
+  const hasSlots = (therapist.availability?.length || 0) > 0;
 
   async function createAppointment() {
     if (!isPatient) { toast("error", "Randevu için hasta hesabıyla giriş yapın."); return; }
     if (!selPackage || !selSlot) { toast("error", "Paket ve slot seçin."); return; }
     await request("/appointments/requests", { method: "POST", body: JSON.stringify({ packageId: selPackage, slotId: selSlot }) });
     await loadAppointments(); close(); setTab("appointments");
+  }
+
+  async function startConversation() {
+    if (!isPatient) { toast("error", "Mesaj göndermek için hasta hesabıyla giriş yapın."); return; }
+    const conversation = await request("/conversations", { method: "POST", body: JSON.stringify({ therapistProfileId: therapist.id, message: messageDraft.trim() || undefined }) });
+    setMessageDraft("");
+    await loadConversations?.();
+    setActiveConversationId?.(conversation.id);
+    close(); setTab("messages");
   }
 
   return (
@@ -634,10 +674,24 @@ function TherapistModal({ therapist, session, isPatient, selPackage, setSelPacka
                 <p className="mt-2 text-center text-xs text-gray-400">Ödeme, terapist onayladıktan sonra alınır.</p>
               </div>
             ) : isPatient ? (
-              <div className="rounded-xl border border-dashed border-gray-300 p-4 text-center text-sm text-gray-400">Randevu oluşturmak için paket ve slot seçin.</div>
+              <div className="rounded-xl border border-dashed border-gray-300 p-4 text-center text-sm text-gray-400">
+                {hasPackages && hasSlots ? "Randevu oluşturmak için paket ve slot seçin." : !hasPackages && !hasSlots ? "Bu terapistin henüz paketi veya açık slotu yok. Aşağıdan mesaj göndererek iletişime geçebilirsiniz." : !hasSlots ? "Bu terapistin açık slotu yok. Aşağıdan mesaj göndererek uygun zamanı sorabilirsiniz." : "Paket seçili değil. Aşağıdan mesaj göndererek bilgi alabilirsiniz."}
+              </div>
             ) : !session ? (
               <div className="rounded-xl border border-teal-200 bg-teal-50 p-5 text-center"><p className="font-bold text-teal-800">Randevu almak için giriş yapın</p></div>
             ) : null}
+
+            {/* Message request */}
+            {isPatient && (
+              <div className="rounded-xl border-2 border-teal-200 bg-white p-5">
+                <h3 className="font-black text-gray-900">💬 Mesaj Gönder</h3>
+                <p className="mt-1 text-sm text-gray-500">Terapiste sorunuzu iletin. Terapist talebinizi onayladığında mesaj alanından görüşebilirsiniz.</p>
+                <div className="mt-3 space-y-3">
+                  <Textarea label="" value={messageDraft} onChange={setMessageDraft} placeholder="Merhaba, durumum hakkında bilgi almak istiyorum..." rows={3} />
+                  <Btn onClick={() => run("Mesaj talebi gönderiliyor", startConversation)} variant="primary" className="w-full">Mesaj Talebi Gönder</Btn>
+                </div>
+              </div>
+            )}
 
             {/* Documents */}
             {therapist.documents?.length > 0 && (
@@ -813,6 +867,157 @@ function AppointmentCard({ appointment: a, session, run, request, reload }: any)
         </div>
       </div>
     </Card>
+  );
+}
+
+// ── Messages ──────────────────────────────────────────────────────────────────
+function MessagesSection({ session, request, conversations, loadConversations, activeConversationId, setActiveConversationId, setUnreadMessages, toast }: any) {
+  if (!session || session.user.role === "ADMIN") return <AuthRequired text="Mesajlaşma için hasta veya terapist hesabıyla giriş yapın." />;
+  const isTherapist = session.user.role === "THERAPIST";
+  const [messages, setMessages] = useState<any[]>([]);
+  const [activeConv, setActiveConv] = useState<any | null>(null);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const selectedId = activeConversationId;
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const other = (c: any) => isTherapist ? c?.patient?.name : c?.therapistProfile?.fullName;
+
+  const openConversation = useCallback(async (id: string) => {
+    setActiveConversationId(id);
+    try {
+      const data = await request<any>("/conversations/" + id + "/messages");
+      setActiveConv(data.conversation);
+      setMessages(data.messages);
+      await loadConversations?.();
+    } catch (e: any) { toast("error", e?.message || "Mesajlar yüklenemedi."); }
+  }, [request, loadConversations, setActiveConversationId, toast]);
+
+  useEffect(() => { loadConversations?.().catch(() => {}); }, []);
+  useEffect(() => { if (selectedId) openConversation(selectedId); }, [selectedId]);
+  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [messages.length, selectedId]);
+
+  // Light polling so new messages and approvals appear without a manual refresh.
+  useEffect(() => {
+    if (!selectedId) return;
+    const timer = setInterval(async () => {
+      try {
+        const data = await request<any>("/conversations/" + selectedId + "/messages");
+        setActiveConv(data.conversation);
+        setMessages(data.messages);
+        loadConversations?.().catch(() => {});
+      } catch {}
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [selectedId, request, loadConversations, setUnreadMessages]);
+
+  async function send() {
+    const body = draft.trim();
+    if (!body || !selectedId) return;
+    setSending(true);
+    try {
+      const data = await request<any>("/conversations/" + selectedId + "/messages", { method: "POST", body: JSON.stringify({ body }) });
+      setActiveConv(data.conversation);
+      setMessages(data.messages);
+      setDraft("");
+      await loadConversations?.();
+    } catch (e: any) { toast("error", e?.message || "Mesaj gönderilemedi."); }
+    finally { setSending(false); }
+  }
+
+  async function review(action: "accept" | "reject") {
+    if (!selectedId) return;
+    try {
+      await request("/conversations/" + selectedId + "/" + action, { method: "PATCH", body: JSON.stringify({}) });
+      await openConversation(selectedId);
+      toast("success", action === "accept" ? "Görüşme kabul edildi." : "Görüşme reddedildi.");
+    } catch (e: any) { toast("error", e?.message || "İşlem başarısız."); }
+  }
+
+  const status = activeConv?.status;
+  const canWrite = status === "ACCEPTED" || (status === "PENDING" && !isTherapist);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div><h1 className="text-3xl font-black">Mesajlar</h1><p className="mt-1 text-gray-500">{isTherapist ? "Hastalarınızla görüşün ve gelen talepleri yanıtlayın." : "Terapistlerle iletişime geçin."}</p></div>
+        <Btn variant="outline" size="sm" onClick={() => loadConversations?.()}>↺ Yenile</Btn>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+        {/* Conversation list */}
+        <Card className="overflow-hidden h-fit max-h-[70vh] overflow-y-auto">
+          {conversations.length ? conversations.map((c: any) => (
+            <button key={c.id} onClick={() => openConversation(c.id)}
+              className={cls("flex w-full items-start gap-3 border-b border-gray-100 p-4 text-left transition", selectedId === c.id ? "bg-teal-50" : "hover:bg-gray-50")}>
+              <div className={cls("flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black bg-gradient-to-br", avatarGrad("BRONZE"))}>{initials(other(c))}</div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate font-bold text-gray-900">{other(c) || "Kullanıcı"}</p>
+                  {c.unreadCount > 0 && <span className="shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{c.unreadCount}</span>}
+                </div>
+                <p className="mt-0.5 truncate text-sm text-gray-500">{c.lastMessage?.body || "Henüz mesaj yok"}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <Badge className={convStatusBadge(c.status)}>{convStatusLabel(c.status)}</Badge>
+                  {c.lastMessageAt && <span className="text-[11px] text-gray-400">{dateTime(c.lastMessageAt)}</span>}
+                </div>
+              </div>
+            </button>
+          )) : <div className="p-8 text-center text-sm text-gray-400">Henüz görüşmeniz yok.{!isTherapist && " Bir terapist profilinden mesaj gönderebilirsiniz."}</div>}
+        </Card>
+
+        {/* Thread */}
+        <Card className="flex h-[70vh] flex-col">
+          {!activeConv ? (
+            <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
+              <span className="text-5xl">💬</span>
+              <p className="mt-3 font-semibold">Bir görüşme seçin</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-5 py-3">
+                <div className="min-w-0">
+                  <h2 className="truncate text-lg font-black text-gray-900">{other(activeConv)}</h2>
+                  <Badge className={convStatusBadge(status)}>{convStatusLabel(status)}</Badge>
+                </div>
+                {isTherapist && status === "PENDING" && (
+                  <div className="flex gap-2">
+                    <Btn variant="primary" size="sm" onClick={() => review("accept")}>Kabul Et ✓</Btn>
+                    <Btn variant="danger" size="sm" onClick={() => review("reject")}>Reddet</Btn>
+                  </div>
+                )}
+              </div>
+              <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-gray-50 p-5">
+                {messages.length ? messages.map((m: any) => {
+                  const mine = m.senderRole === activeConv.viewerRole;
+                  return (
+                    <div key={m.id} className={cls("flex", mine ? "justify-end" : "justify-start")}>
+                      <div className={cls("max-w-[78%] rounded-2xl px-4 py-2 text-sm shadow-sm", mine ? "rounded-br-sm bg-teal-700 text-white" : "rounded-bl-sm border border-gray-200 bg-white text-gray-800")}>
+                        <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                        <p className={cls("mt-1 text-[10px]", mine ? "text-teal-100" : "text-gray-400")}>{dateTime(m.createdAt)}</p>
+                      </div>
+                    </div>
+                  );
+                }) : <p className="text-center text-sm text-gray-400">Henüz mesaj yok. İlk mesajı gönderin.</p>}
+              </div>
+              <div className="border-t border-gray-200 p-3">
+                {canWrite ? (
+                  <div className="flex items-end gap-2">
+                    <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={1} placeholder="Mesaj yazın..."
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+                      className="max-h-32 flex-1 resize-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100" />
+                    <Btn onClick={send} disabled={sending || !draft.trim()} variant="primary" size="md">Gönder</Btn>
+                  </div>
+                ) : (
+                  <p className="px-2 py-1 text-center text-sm text-gray-400">
+                    {status === "REJECTED" ? "Bu görüşme talebi reddedildi." : isTherapist ? "Mesajlaşmak için talebi kabul edin." : "Terapistin talebinizi onaylaması bekleniyor."}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+        </Card>
+      </div>
+    </div>
   );
 }
 

@@ -69,6 +69,13 @@ export function createApiClient(options: ApiClientOptions) {
     createSlot: (input: { startsAt: string; endsAt: string }) => request<any>("/therapists/me/slots", { method: "POST", body: JSON.stringify(input) }),
     createReview: (therapistId: string, input: unknown) => request<any>("/marketplace/therapists/" + therapistId + "/reviews", { method: "POST", body: JSON.stringify(reviewSchema.parse(input)) }),
     loyalty: () => request<any>("/users/loyalty"),
-    mobileCheckout: (appointmentId: string) => request<any>("/payments/mobile-checkout/" + appointmentId)
+    mobileCheckout: (appointmentId: string) => request<any>("/payments/mobile-checkout/" + appointmentId),
+    conversations: () => request<any[]>("/conversations"),
+    unreadMessages: () => request<{ unreadCount: number }>("/conversations/unread-count"),
+    startConversation: (input: { therapistProfileId: string; message?: string }) => request<any>("/conversations", { method: "POST", body: JSON.stringify(input) }),
+    conversationMessages: (conversationId: string) => request<any>("/conversations/" + conversationId + "/messages"),
+    sendMessage: (conversationId: string, body: string) => request<any>("/conversations/" + conversationId + "/messages", { method: "POST", body: JSON.stringify({ body }) }),
+    acceptConversation: (conversationId: string) => request<any>("/conversations/" + conversationId + "/accept", { method: "PATCH", body: JSON.stringify({}) }),
+    rejectConversation: (conversationId: string) => request<any>("/conversations/" + conversationId + "/reject", { method: "PATCH", body: JSON.stringify({}) })
   };
 }

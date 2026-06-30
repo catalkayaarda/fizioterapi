@@ -6,6 +6,7 @@ import { AppointmentsModule } from "./appointments/appointments.module";
 import { AssessmentModule } from "./assessment/assessment.module";
 import { CatalogModule } from "./catalog/catalog.module";
 import { MarketplaceModule } from "./marketplace/marketplace.module";
+import { MessagingModule } from "./messaging/messaging.module";
 import { LoyaltyModule } from "./loyalty/loyalty.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { AuthModule } from "./auth/auth.module";
@@ -30,7 +31,8 @@ import { UsersModule } from "./users/users.module";
     AssessmentModule,
     AppointmentsModule,
     PaymentsModule,
-    LoyaltyModule
+    LoyaltyModule,
+    MessagingModule
   ]
 })
 export class AppModule {}
