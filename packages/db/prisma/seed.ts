@@ -209,20 +209,14 @@ async function main() {
         fullName: therapist.fullName,
         bio: therapist.bio,
         status: TherapistStatus.APPROVED,
-        tier: therapist.tier,
-        reviewedAt: new Date(),
-        commissionRate: 0.20,
-        iyzicoSubMerchantId: "sub_" + user.id
+        reviewedAt: new Date()
       },
       create: {
         userId: user.id,
         fullName: therapist.fullName,
         bio: therapist.bio,
         status: TherapistStatus.APPROVED,
-        tier: therapist.tier,
-        reviewedAt: new Date(),
-        commissionRate: 0.20,
-        iyzicoSubMerchantId: "sub_" + user.id
+        reviewedAt: new Date()
       }
     });
 

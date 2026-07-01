@@ -79,7 +79,7 @@ export class MessagingService {
       where,
       include: {
         patient: { select: { id: true, name: true, email: true } },
-        therapistProfile: { select: { id: true, userId: true, fullName: true, loyaltyTier: true } },
+        therapistProfile: { select: { id: true, userId: true, fullName: true } },
         messages: { orderBy: { createdAt: "desc" }, take: 1 }
       },
       orderBy: [{ lastMessageAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }]

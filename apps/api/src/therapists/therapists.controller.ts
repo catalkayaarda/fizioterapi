@@ -6,7 +6,7 @@ import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { UploadableFile } from "../storage/storage.service";
-import { packageSchema, profileSchema, slotSchema, specialtySchema, TherapistsService } from "./therapists.service";
+import { packageSchema, profileSchema, specialtySchema, TherapistsService } from "./therapists.service";
 
 type RequestWithUser = { user: JwtPayload };
 
@@ -80,26 +80,5 @@ export class TherapistsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   deletePackage(@Req() request: RequestWithUser, @Param("packageId") packageId: string) {
     return this.therapistsService.deletePackage(request.user.sub, packageId);
-  }
-
-  @Get("me/slots")
-  @Roles(Role.THERAPIST)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  listSlots(@Req() request: RequestWithUser) {
-    return this.therapistsService.listSlots(request.user.sub);
-  }
-
-  @Post("me/slots")
-  @Roles(Role.THERAPIST)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  createSlot(@Req() request: RequestWithUser, @Body() body: unknown) {
-    return this.therapistsService.createSlot(request.user.sub, slotSchema.parse(body));
-  }
-
-  @Delete("me/slots/:slotId")
-  @Roles(Role.THERAPIST)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  deleteSlot(@Req() request: RequestWithUser, @Param("slotId") slotId: string) {
-    return this.therapistsService.deleteSlot(request.user.sub, slotId);
   }
 }

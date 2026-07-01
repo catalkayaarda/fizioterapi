@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Role = "PATIENT" | "THERAPIST" | "ADMIN";
 type Session = { accessToken: string; user: { id: string; email: string; name: string; role: Role } };
-type Tab = "home" | "therapists" | "assessment" | "appointments" | "messages" | "therapist" | "admin" | "profile";
+type Tab = "home" | "therapists" | "assessment" | "messages" | "therapist" | "admin" | "profile";
 type Toast = { id: number; type: "success" | "error" | "info"; text: string };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -23,10 +23,6 @@ function dateOnly(v: unknown) {
   if (!v) return "—";
   return new Date(String(v)).toLocaleDateString("tr-TR", { dateStyle: "long" });
 }
-function timeOnly(v: unknown) {
-  if (!v) return "—";
-  return new Date(String(v)).toLocaleTimeString("tr-TR", { timeStyle: "short" });
-}
 function cls(...items: Array<string | false | null | undefined>) {
   return items.filter(Boolean).join(" ");
 }
@@ -41,27 +37,15 @@ function roleLabel(v: string) {
   return ({ PATIENT: "Hasta", THERAPIST: "Fizyoterapist", ADMIN: "Yönetici" } as Record<string,string>)[v] || v;
 }
 function statusLabel(v: string) {
-  const m: Record<string,string> = { PENDING:"Bekliyor", APPROVED:"Onaylandı", REJECTED:"Reddedildi", REQUESTED:"Talep edildi", CONFIRMED:"Onaylandı", COMPLETED:"Tamamlandı", CANCELLED:"İptal edildi", OPEN:"Açık", BOOKED:"Dolu", CLOSED:"Kapalı", HELD:"Güvencede", RELEASED:"Aktarıldı", REFUNDED:"İade edildi", FAILED:"Başarısız" };
+  const m: Record<string,string> = { PENDING:"Bekliyor", APPROVED:"Onaylandı", REJECTED:"Reddedildi" };
   return m[v] || v;
+}
+function statusBadge(v: string) {
+  const m: Record<string,string> = { PENDING:"bg-orange-50 text-orange-700 border-orange-200", APPROVED:"bg-green-50 text-green-700 border-green-200", REJECTED:"bg-red-50 text-red-700 border-red-200" };
+  return m[v] || "bg-gray-50 text-gray-600 border-gray-200";
 }
 function modeLabel(v: string) {
   return ({ ONLINE:"Online", PHYSICAL:"Yüz yüze", BOTH:"Online & Yüz yüze" } as Record<string,string>)[v] || v;
-}
-function tierKey(v: string | number | null | undefined) {
-  const s = String(v ?? "BRONZE").toUpperCase();
-  if (s === "VIP" || s === "4") return "VIP";
-  if (s === "GOLD" || s === "3") return "GOLD";
-  if (s === "SILVER" || s === "2") return "SILVER";
-  return "BRONZE";
-}
-function tierLabel(v: string | number | null | undefined) {
-  return ({ BRONZE:"Bronz", SILVER:"Gümüş", GOLD:"Altın", VIP:"VIP" } as Record<string,string>)[tierKey(v)] || "Bronz";
-}
-function tierBadge(v: string | number | null | undefined) {
-  return ({ BRONZE:"border-amber-600 bg-amber-50 text-amber-800", SILVER:"border-slate-400 bg-slate-100 text-slate-600", GOLD:"border-yellow-500 bg-yellow-50 text-yellow-700", VIP:"border-violet-500 bg-violet-50 text-violet-700" } as Record<string,string>)[tierKey(v)];
-}
-function avatarGrad(v: string | number | null | undefined) {
-  return ({ BRONZE:"from-amber-300 to-amber-100 text-amber-900", SILVER:"from-slate-300 to-slate-100 text-slate-700", GOLD:"from-yellow-300 to-yellow-100 text-yellow-900", VIP:"from-violet-500 to-violet-200 text-white" } as Record<string,string>)[tierKey(v)];
 }
 function convStatusLabel(v: string) {
   return ({ PENDING: "Onay bekliyor", ACCEPTED: "Aktif", REJECTED: "Reddedildi" } as Record<string,string>)[v] || v;
@@ -69,9 +53,8 @@ function convStatusLabel(v: string) {
 function convStatusBadge(v: string) {
   return ({ PENDING: "border-orange-200 bg-orange-50 text-orange-700", ACCEPTED: "border-green-200 bg-green-50 text-green-700", REJECTED: "border-red-200 bg-red-50 text-red-700" } as Record<string,string>)[v] || "border-gray-200 bg-gray-50 text-gray-600";
 }
-function statusBadge(v: string) {
-  const m: Record<string,string> = { REQUESTED:"bg-blue-50 text-blue-700 border-blue-200", CONFIRMED:"bg-teal-50 text-teal-700 border-teal-200", COMPLETED:"bg-green-50 text-green-700 border-green-200", CANCELLED:"bg-red-50 text-red-700 border-red-200", PENDING:"bg-orange-50 text-orange-700 border-orange-200", APPROVED:"bg-green-50 text-green-700 border-green-200", REJECTED:"bg-red-50 text-red-700 border-red-200", HELD:"bg-teal-50 text-teal-700 border-teal-200", RELEASED:"bg-green-50 text-green-700 border-green-200", REFUNDED:"bg-purple-50 text-purple-700 border-purple-200" };
-  return m[v] || "bg-gray-50 text-gray-600 border-gray-200";
+function avatarGrad() {
+  return "from-teal-600 to-teal-300 text-white";
 }
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
@@ -163,13 +146,10 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
   const [treatmentTypes, setTreatmentTypes] = useState<any[]>([]);
   const [therapists, setTherapists] = useState<any[]>([]);
   const [selectedTherapist, setSelectedTherapist] = useState<any | null>(null);
-  const [appointments, setAppointments] = useState<any[]>([]);
   const [questions, setQuestions] = useState<any[]>([]);
   const [assessmentResult, setAssessmentResult] = useState<any | null>(null);
   const [therapistProfile, setTherapistProfile] = useState<any | null>(null);
-  const [incoming, setIncoming] = useState<any[]>([]);
   const [pendingTherapists, setPendingTherapists] = useState<any[]>([]);
-  const [loyalty, setLoyalty] = useState<any | null>(null);
   const [conversations, setConversations] = useState<any[]>([]);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -186,7 +166,9 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
     if (session?.accessToken) headers.set("authorization", "Bearer " + session.accessToken);
     const res = await fetch(API_URL.replace(/\/$/, "") + path, { ...init, headers });
     const text = await res.text();
-    const body = text ? JSON.parse(text) : null;
+    let body: any = null;
+    try { body = text ? JSON.parse(text) : null; }
+    catch { throw new Error("Sunucudan beklenmeyen yanıt alındı. API adresini (NEXT_PUBLIC_API_URL) kontrol edin."); }
     if (!res.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(", ") : body?.message || res.statusText);
     return body as T;
   }, [session?.accessToken]);
@@ -205,15 +187,9 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
     } catch {}
   }, [request]);
 
-  const loadAppointments = useCallback(async () => {
-    if (!session) return;
-    setAppointments(await request<any[]>("/appointments/mine"));
-  }, [request, session]);
-
   const loadTherapistPanel = useCallback(async () => {
     if (!session || session.user.role !== "THERAPIST") return;
-    const [profile, reqs, mine] = await Promise.all([request<any>("/therapists/me"), request<any[]>("/appointments/incoming"), request<any[]>("/appointments/mine")]);
-    setTherapistProfile(profile); setIncoming(reqs); setAppointments(mine);
+    setTherapistProfile(await request<any>("/therapists/me"));
   }, [request, session]);
 
   const loadAdminPanel = useCallback(async () => {
@@ -238,7 +214,6 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
 
   useEffect(() => {
     if (!session) return;
-    if (session.user.role === "PATIENT") { loadAppointments().catch(() => {}); request<any>("/users/loyalty").then(setLoyalty).catch(() => {}); }
     if (session.user.role === "THERAPIST") loadTherapistPanel().catch(() => {});
     if (session.user.role === "ADMIN") loadAdminPanel().catch(() => {});
     if (session.user.role !== "ADMIN") loadConversations().catch(() => {});
@@ -268,8 +243,8 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
     const base: Array<{ key: Tab; label: string }> = [
       { key: "home", label: "Ana Sayfa" }, { key: "therapists", label: "Terapistler" }, { key: "assessment", label: "Yönlendirme Testi" }
     ];
-    if (session?.user.role === "PATIENT") base.push({ key: "appointments", label: "Randevularım" }, { key: "messages", label: "Mesajlar" }, { key: "profile", label: "Profilim" });
-    if (session?.user.role === "THERAPIST") base.push({ key: "therapist", label: "Pro Panel" }, { key: "appointments", label: "Randevularım" }, { key: "messages", label: "Mesajlar" });
+    if (session?.user.role === "PATIENT") base.push({ key: "messages", label: "Mesajlar" }, { key: "profile", label: "Profilim" });
+    if (session?.user.role === "THERAPIST") base.push({ key: "therapist", label: "Pro Panel" }, { key: "messages", label: "Mesajlar" });
     if (session?.user.role === "ADMIN") base.push({ key: "admin", label: "Yönetim" });
     return base;
   }, [session?.user.role]);
@@ -285,7 +260,6 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
               <button key={item.key} onClick={() => setTab(item.key)}
                 className={cls("rounded-lg px-4 py-2 text-sm font-semibold transition", tab === item.key ? "bg-teal-700 text-white" : "text-gray-600 hover:bg-gray-100")}>
                 {item.label}
-                {item.key === "therapist" && incoming.length > 0 && <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] text-white">{incoming.length}</span>}
                 {item.key === "messages" && unreadMessages > 0 && <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] text-white">{unreadMessages}</span>}
               </button>
             ))}
@@ -293,10 +267,7 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
           <div className="flex items-center gap-3">
             {session ? (
               <>
-                <span className="hidden rounded-full bg-teal-50 px-3 py-1.5 text-sm font-bold text-teal-700 sm:inline">
-                  {session.user.name}
-                  {loyalty?.loyaltyTier && <Badge className={cls("ml-2", tierBadge(loyalty.loyaltyTier))}>{tierLabel(loyalty.loyaltyTier)}</Badge>}
-                </span>
+                <span className="hidden rounded-full bg-teal-50 px-3 py-1.5 text-sm font-bold text-teal-700 sm:inline">{session.user.name}</span>
                 <Btn variant="ghost" size="sm" onClick={logout}>Çıkış</Btn>
               </>
             ) : (
@@ -310,6 +281,7 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
             <button key={item.key} onClick={() => setTab(item.key)}
               className={cls("shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap transition", tab === item.key ? "bg-teal-700 text-white" : "bg-gray-100 text-gray-600")}>
               {item.label}
+              {item.key === "messages" && unreadMessages > 0 && <span className="ml-1 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] text-white">{unreadMessages}</span>}
             </button>
           ))}
         </div>
@@ -332,14 +304,13 @@ export default function LiveApp({ initialTab = "home" }: { initialTab?: Tab }) {
       {/* Content */}
       <main className="mx-auto max-w-7xl px-6 py-8">
         {!session && tab === "profile" ? <AuthSection request={request} saveSession={saveSession} /> : null}
-        {tab === "home" ? <HomeSection treatmentTypes={treatmentTypes} therapists={therapists} session={session} loyalty={loyalty} appointments={appointments} openTherapist={id => run("Terapist yükleniyor", () => openTherapist(id))} setTab={setTab} /> : null}
-        {tab === "therapists" ? <TherapistsSection request={request} treatmentTypes={treatmentTypes} therapists={therapists} setTherapists={setTherapists} selectedTherapist={selectedTherapist} setSelectedTherapist={setSelectedTherapist} session={session} run={run} loadAppointments={loadAppointments} loadConversations={loadConversations} setActiveConversationId={setActiveConversationId} setTab={setTab} toast={toast} /> : null}
+        {tab === "home" ? <HomeSection treatmentTypes={treatmentTypes} therapists={therapists} openTherapist={id => run("Terapist yükleniyor", () => openTherapist(id))} setTab={setTab} /> : null}
+        {tab === "therapists" ? <TherapistsSection request={request} treatmentTypes={treatmentTypes} therapists={therapists} setTherapists={setTherapists} selectedTherapist={selectedTherapist} setSelectedTherapist={setSelectedTherapist} session={session} run={run} loadConversations={loadConversations} setActiveConversationId={setActiveConversationId} setTab={setTab} toast={toast} /> : null}
         {tab === "assessment" ? <AssessmentSection questions={questions} setQuestions={setQuestions} request={request} result={assessmentResult} setResult={setAssessmentResult} run={run} openTherapist={id => run("Terapist yükleniyor", () => openTherapist(id))} setTab={setTab} /> : null}
-        {tab === "appointments" ? <AppointmentsSection session={session} appointments={appointments} run={run} request={request} reload={session?.user.role === "THERAPIST" ? loadTherapistPanel : loadAppointments} /> : null}
-        {tab === "messages" ? <MessagesSection session={session} request={request} conversations={conversations} loadConversations={loadConversations} activeConversationId={activeConversationId} setActiveConversationId={setActiveConversationId} setUnreadMessages={setUnreadMessages} toast={toast} /> : null}
-        {tab === "therapist" ? <TherapistProSection session={session} request={request} run={run} treatmentTypes={treatmentTypes} profile={therapistProfile} incoming={incoming} appointments={appointments} reload={loadTherapistPanel} toast={toast} /> : null}
+        {tab === "messages" ? <MessagesSection session={session} request={request} conversations={conversations} loadConversations={loadConversations} activeConversationId={activeConversationId} setActiveConversationId={setActiveConversationId} toast={toast} /> : null}
+        {tab === "therapist" ? <TherapistProSection session={session} request={request} run={run} treatmentTypes={treatmentTypes} profile={therapistProfile} conversations={conversations} reload={loadTherapistPanel} setTab={setTab} toast={toast} /> : null}
         {tab === "admin" ? <AdminSection session={session} request={request} run={run} pending={pendingTherapists} reload={loadAdminPanel} /> : null}
-        {session && tab === "profile" ? <ProfileSection session={session} loyalty={loyalty} setLoyalty={setLoyalty} request={request} run={run} setTab={setTab} /> : null}
+        {session && tab === "profile" ? <ProfileSection session={session} setTab={setTab} /> : null}
       </main>
 
       {/* Footer */}
@@ -399,8 +370,7 @@ function AuthSection({ request, saveSession }: any) {
 // ── Home ──────────────────────────────────────────────────────────────────────
 const ICONS: Record<string,string> = { "manuel-terapi":"🤲","ortopedik-rehabilitasyon":"🦴","norolojik-rehabilitasyon":"🧠","sporcu-fizyoterapisi":"🏃","pediatrik-fizyoterapi":"👶","geriatrik-fizyoterapi":"👴","kardiyopulmoner-rehabilitasyon":"❤️","pelvik-taban-rehabilitasyonu":"🏥","postur-ve-skolyoz":"🦷" };
 
-function HomeSection({ treatmentTypes, therapists, session, loyalty, appointments, openTherapist, setTab }: any) {
-  const upcoming = appointments?.filter((a: any) => ["REQUESTED","CONFIRMED"].includes(a.status)) || [];
+function HomeSection({ treatmentTypes, therapists, openTherapist, setTab }: any) {
   return (
     <div className="space-y-12">
       {/* Hero */}
@@ -408,7 +378,7 @@ function HomeSection({ treatmentTypes, therapists, session, loyalty, appointment
         <div className="relative z-10 max-w-2xl">
           <div className="mb-6 inline-flex items-center rounded-full border border-teal-400/50 bg-teal-700/50 px-4 py-1.5 text-sm font-bold text-teal-100">✓ Türkiye'nin Güvenilir Fizyoterapi Platformu</div>
           <h1 className="text-4xl font-black leading-tight md:text-5xl">Size en uygun<br />fizyoterapisti bulun</h1>
-          <p className="mt-4 max-w-xl text-lg text-teal-100">Online ve yüz yüze seans, uzman terapistler, güvenli ödeme. Hepsi tek platformda.</p>
+          <p className="mt-4 max-w-xl text-lg text-teal-100">Uzman terapistler, hizmet paketleri ve doğrudan mesajlaşma. Hepsi tek platformda.</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <button onClick={() => setTab("therapists")} className="inline-flex items-center justify-center rounded-lg bg-white px-8 py-4 text-base font-black text-teal-800 shadow-sm hover:bg-teal-50 transition">Terapist Ara →</button>
             <button onClick={() => setTab("assessment")} className="inline-flex items-center justify-center rounded-lg border border-white/40 bg-white/10 px-8 py-4 text-base font-black text-white hover:bg-white/20 transition">Yönlendirme Testi</button>
@@ -417,20 +387,9 @@ function HomeSection({ treatmentTypes, therapists, session, loyalty, appointment
         <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-white opacity-5" />
       </section>
 
-      {/* Upcoming appointment alert */}
-      {session?.user.role === "PATIENT" && upcoming.length > 0 && (
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-teal-200 bg-teal-50 px-6 py-4">
-          <div>
-            <p className="font-bold text-teal-800">📅 Yaklaşan randevunuz var</p>
-            <p className="mt-1 text-sm text-teal-600">{upcoming[0].therapistProfile?.fullName} · {upcoming[0].package?.name} · {dateTime(upcoming[0].slot?.startsAt)}</p>
-          </div>
-          <Btn variant="outline" size="sm" onClick={() => setTab("appointments")}>Görüntüle</Btn>
-        </div>
-      )}
-
       {/* Stats bar */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        {[{ label: "Onaylı Terapist", val: therapists.length + "+" }, { label: "Tedavi Alanı", val: treatmentTypes.length }, { label: "Ortalama Puan", val: "4.9★" }, { label: "Güvenli Ödeme", val: "iyzico" }].map(s => (
+        {[{ label: "Onaylı Terapist", val: therapists.length + "+" }, { label: "Tedavi Alanı", val: treatmentTypes.length }, { label: "Ortalama Puan", val: "4.9★" }, { label: "Uzman Kadro", val: "✓" }].map(s => (
           <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-5 text-center shadow-sm">
             <p className="text-2xl font-black text-teal-700">{s.val}</p>
             <p className="mt-1 text-sm font-semibold text-gray-500">{s.label}</p>
@@ -442,7 +401,7 @@ function HomeSection({ treatmentTypes, therapists, session, loyalty, appointment
       <section>
         <h2 className="text-2xl font-black">Nasıl Çalışır?</h2>
         <div className="mt-6 grid gap-5 md:grid-cols-3">
-          {[{ n:"1", t:"Terapist Seç", d:"Uzmanlık, fiyat ve müsaitlik durumuna göre filtrele." }, { n:"2", t:"Randevu Oluştur", d:"Uygun slot ve paketi seçerek talebini ilet." }, { n:"3", t:"Seansi Tamamla", d:"Online veya yüz yüze seans sonrası puanını paylaş." }].map(s => (
+          {[{ n:"1", t:"Terapist Seç", d:"Uzmanlık, paket ve fiyata göre filtrele." }, { n:"2", t:"Mesaj Gönder", d:"Terapiste ulaş, talebini ilet." }, { n:"3", t:"Görüş", d:"Terapist onaylayınca mesaj alanında konuş." }].map(s => (
             <Card key={s.n} className="p-6">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-700 text-lg font-black text-white">{s.n}</div>
               <h3 className="mt-4 text-lg font-black">{s.t}</h3>
@@ -479,7 +438,7 @@ function HomeSection({ treatmentTypes, therapists, session, loyalty, appointment
       <section className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
         <h2 className="text-center text-xl font-black">Neden FizioTerapi?</h2>
         <div className="mt-8 grid gap-6 md:grid-cols-4">
-          {[{ icon:"🛡️", t:"Güvenli Ödeme", d:"iyzico escrow sistemiyle para güvencede." }, { icon:"✅", t:"Onaylı Terapistler", d:"Her terapist belge incelemesinden geçer." }, { icon:"⭐", t:"Gerçek Yorumlar", d:"Sadece seans sonrası yorum yapılabilir." }, { icon:"🎁", t:"Sadakat Programı", d:"Her seanste puan kazan, indirim kazan." }].map(f => (
+          {[{ icon:"✅", t:"Onaylı Terapistler", d:"Her terapist belge incelemesinden geçer." }, { icon:"💬", t:"Doğrudan Mesajlaşma", d:"Terapistle uygulama içinden konuş." }, { icon:"📦", t:"Şeffaf Paketler", d:"Seans ve fiyatlar açıkça listelenir." }, { icon:"⭐", t:"Gerçek Yorumlar", d:"Hastaların değerlendirmelerini gör." }].map(f => (
             <div key={f.t} className="text-center"><span className="text-4xl">{f.icon}</span><h3 className="mt-3 font-bold text-gray-900">{f.t}</h3><p className="mt-1 text-sm text-gray-500">{f.d}</p></div>
           ))}
         </div>
@@ -489,14 +448,13 @@ function HomeSection({ treatmentTypes, therapists, session, loyalty, appointment
 }
 
 function TherapistCard({ therapist, onOpen }: any) {
-  const tier = therapist.loyaltyTier || therapist.tier;
   const minPrice = therapist.packages?.[0]?.price;
   const spec = therapist.specialties?.map((s: any) => s.treatmentType?.name).filter(Boolean).join(", ") || "Uzmanlık bekleniyor";
   return (
     <Card className="overflow-hidden hover:shadow-md transition-shadow">
-      <div className={cls("flex aspect-video items-center justify-center text-5xl font-black bg-gradient-to-br", avatarGrad(tier))}>{initials(therapist.fullName)}</div>
+      <div className={cls("flex aspect-video items-center justify-center text-5xl font-black bg-gradient-to-br", avatarGrad())}>{initials(therapist.fullName)}</div>
       <div className="p-5">
-        <div className="flex items-start justify-between gap-2"><h3 className="font-black text-gray-900">{therapist.fullName}</h3><Badge className={tierBadge(tier)}>{tierLabel(tier)}</Badge></div>
+        <h3 className="font-black text-gray-900">{therapist.fullName}</h3>
         <p className="mt-1 text-sm font-bold text-yellow-500">{stars(therapist.averageRating)} <span className="font-normal text-gray-400">{Number(therapist.averageRating || 0).toFixed(1)} ({therapist.reviewCount || 0})</span></p>
         <p className="mt-2 line-clamp-1 text-sm text-gray-500">{spec}</p>
         <div className="mt-4 flex items-center justify-between">
@@ -509,9 +467,9 @@ function TherapistCard({ therapist, onOpen }: any) {
 }
 
 // ── Therapists Section ────────────────────────────────────────────────────────
-function TherapistsSection({ request, treatmentTypes, therapists, setTherapists, selectedTherapist, setSelectedTherapist, session, run, loadAppointments, loadConversations, setActiveConversationId, setTab, toast }: any) {
+function TherapistsSection({ request, treatmentTypes, therapists, setTherapists, selectedTherapist, setSelectedTherapist, session, run, loadConversations, setActiveConversationId, setTab, toast }: any) {
   const [treatmentType, setTreatmentType] = useState(""); const [mode, setMode] = useState(""); const [minPrice, setMinPrice] = useState(""); const [maxPrice, setMaxPrice] = useState("");
-  const [selPackage, setSelPackage] = useState(""); const [selSlot, setSelSlot] = useState(""); const [review, setReview] = useState(""); const [rating, setRating] = useState("5");
+  const [review, setReview] = useState(""); const [rating, setRating] = useState("5");
   const isPatient = session?.user.role === "PATIENT";
 
   async function search() {
@@ -520,8 +478,7 @@ function TherapistsSection({ request, treatmentTypes, therapists, setTherapists,
     setTherapists(await request("/marketplace/therapists" + (p.toString() ? "?" + p : ""))); setSelectedTherapist(null);
   }
   async function detail(id: string) {
-    const d = await request("/marketplace/therapists/" + id);
-    setSelectedTherapist(d); setSelPackage(d.packages?.[0]?.id || ""); setSelSlot(d.availability?.[0]?.id || "");
+    setSelectedTherapist(await request("/marketplace/therapists/" + id));
   }
 
   return (
@@ -544,26 +501,24 @@ function TherapistsSection({ request, treatmentTypes, therapists, setTherapists,
         </div>
       </div>
       {selectedTherapist && (
-        <TherapistModal therapist={selectedTherapist} session={session} isPatient={isPatient} selPackage={selPackage} setSelPackage={setSelPackage} selSlot={selSlot} setSelSlot={setSelSlot} review={review} setReview={setReview} rating={rating} setRating={setRating} close={() => setSelectedTherapist(null)} run={run} request={request} refresh={() => detail(selectedTherapist.id)} loadAppointments={loadAppointments} loadConversations={loadConversations} setActiveConversationId={setActiveConversationId} setTab={setTab} toast={toast} />
+        <TherapistModal therapist={selectedTherapist} session={session} isPatient={isPatient} review={review} setReview={setReview} rating={rating} setRating={setRating} close={() => setSelectedTherapist(null)} run={run} request={request} refresh={() => detail(selectedTherapist.id)} loadConversations={loadConversations} setActiveConversationId={setActiveConversationId} setTab={setTab} toast={toast} />
       )}
     </div>
   );
 }
 
 function TherapistListRow({ therapist, onOpen }: any) {
-  const tier = therapist.loyaltyTier || therapist.tier;
   const packages = therapist.packages || [];
   const minPrice = packages[0]?.price;
   const spec = therapist.specialties?.map((s: any) => s.treatmentType?.name).filter(Boolean).join(", ") || "Uzmanlık bekleniyor";
-  const nextSlot = therapist.availability?.[0];
   return (
     <Card className="p-5">
       <div className="flex gap-4 items-start">
-        <div className={cls("hidden h-20 w-20 shrink-0 items-center justify-center rounded-xl text-2xl font-black bg-gradient-to-br sm:flex", avatarGrad(tier))}>{initials(therapist.fullName)}</div>
+        <div className={cls("hidden h-20 w-20 shrink-0 items-center justify-center rounded-xl text-2xl font-black bg-gradient-to-br sm:flex", avatarGrad())}>{initials(therapist.fullName)}</div>
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-black text-gray-900">{therapist.fullName}</h3><Badge className={tierBadge(tier)}>{tierLabel(tier)}</Badge></div>
+              <h3 className="text-lg font-black text-gray-900">{therapist.fullName}</h3>
               <p className="mt-1 text-sm font-bold text-yellow-500">{stars(therapist.averageRating)} <span className="font-normal text-gray-400">{Number(therapist.averageRating || 0).toFixed(1)} · {therapist.reviewCount || 0} yorum</span></p>
             </div>
             <div className="text-right"><p className="text-xs text-gray-400">Başlangıç</p><p className="text-lg font-black text-teal-700">{minPrice ? money(minPrice) : "—"}</p></div>
@@ -572,7 +527,6 @@ function TherapistListRow({ therapist, onOpen }: any) {
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2 text-xs">
               {packages.length > 0 && <span className="rounded-full bg-teal-50 px-3 py-1 font-bold text-teal-700">{packages.length} paket</span>}
-              {nextSlot && <span className="rounded-full bg-gray-100 px-3 py-1 font-bold text-gray-600">İlk: {dateTime(nextSlot.startsAt)}</span>}
               {therapist.city && <span className="rounded-full bg-gray-100 px-3 py-1 font-bold text-gray-600">📍 {therapist.city}</span>}
             </div>
             <Btn variant="primary" size="sm" onClick={onOpen}>Profili Gör</Btn>
@@ -583,20 +537,8 @@ function TherapistListRow({ therapist, onOpen }: any) {
   );
 }
 
-function TherapistModal({ therapist, session, isPatient, selPackage, setSelPackage, selSlot, setSelSlot, review, setReview, rating, setRating, close, run, request, refresh, loadAppointments, loadConversations, setActiveConversationId, setTab, toast }: any) {
-  const tier = therapist.loyaltyTier || therapist.tier;
-  const pkg = therapist.packages?.find((p: any) => p.id === selPackage);
-  const slot = therapist.availability?.find((s: any) => s.id === selSlot);
+function TherapistModal({ therapist, session, isPatient, review, setReview, rating, setRating, close, run, request, refresh, loadConversations, setActiveConversationId, setTab, toast }: any) {
   const [messageDraft, setMessageDraft] = useState("");
-  const hasPackages = (therapist.packages?.length || 0) > 0;
-  const hasSlots = (therapist.availability?.length || 0) > 0;
-
-  async function createAppointment() {
-    if (!isPatient) { toast("error", "Randevu için hasta hesabıyla giriş yapın."); return; }
-    if (!selPackage || !selSlot) { toast("error", "Paket ve slot seçin."); return; }
-    await request("/appointments/requests", { method: "POST", body: JSON.stringify({ packageId: selPackage, slotId: selSlot }) });
-    await loadAppointments(); close(); setTab("appointments");
-  }
 
   async function startConversation() {
     if (!isPatient) { toast("error", "Mesaj göndermek için hasta hesabıyla giriş yapın."); return; }
@@ -617,12 +559,10 @@ function TherapistModal({ therapist, session, isPatient, selPackage, setSelPacka
         <div className="grid gap-6 p-6 lg:grid-cols-[220px_1fr]">
           {/* Left */}
           <aside className="space-y-4">
-            <div className={cls("flex aspect-square items-center justify-center rounded-xl text-5xl font-black bg-gradient-to-br", avatarGrad(tier))}>{initials(therapist.fullName)}</div>
+            <div className={cls("flex aspect-square items-center justify-center rounded-xl text-5xl font-black bg-gradient-to-br", avatarGrad())}>{initials(therapist.fullName)}</div>
             <div className="space-y-2">
-              <Badge className={tierBadge(tier)}>{tierLabel(tier)}</Badge>
               {therapist.city && <p className="text-sm text-gray-500">📍 {therapist.city}</p>}
               <div className="rounded-xl bg-gray-50 p-3"><p className="text-lg font-black text-yellow-500">{stars(therapist.averageRating)}</p><p className="mt-1 text-sm font-semibold text-gray-700">{Number(therapist.averageRating || 0).toFixed(1)} · {therapist.reviewCount || 0} yorum</p></div>
-              <div className="rounded-xl bg-gray-50 p-3"><p className="text-xs font-bold uppercase text-gray-400">Tamamlanan Seans</p><p className="mt-1 text-2xl font-black text-gray-900">{therapist.completedAppointments || 0}</p></div>
             </div>
           </aside>
           {/* Right */}
@@ -637,61 +577,29 @@ function TherapistModal({ therapist, session, isPatient, selPackage, setSelPacka
               <h3 className="font-black text-gray-900">Hizmet Paketleri</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {therapist.packages?.map((p: any) => (
-                  <button key={p.id} onClick={() => setSelPackage(p.id)} className={cls("rounded-xl border-2 p-4 text-left transition", selPackage === p.id ? "border-teal-600 bg-teal-50" : "border-gray-200 hover:border-teal-300")}>
-                    <div className="flex items-start justify-between"><div><p className="font-bold text-gray-900">{p.name}</p><p className="text-sm text-gray-500">{p.sessionCount} seans · {modeLabel(p.mode)}</p></div>{selPackage === p.id && <span className="text-teal-600">✓</span>}</div>
+                  <div key={p.id} className="rounded-xl border-2 border-gray-200 p-4">
+                    <p className="font-bold text-gray-900">{p.name}</p>
+                    <p className="text-sm text-gray-500">{p.sessionCount} seans · {modeLabel(p.mode)}</p>
                     <p className="mt-2 text-xl font-black text-teal-700">{money(p.price)}</p>
-                  </button>
+                  </div>
                 ))}
                 {!therapist.packages?.length && <p className="col-span-2 text-sm text-gray-400">Henüz paket eklenmemiş.</p>}
               </div>
             </div>
 
-            <div>
-              <h3 className="font-black text-gray-900">Müsait Slotlar</h3>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {therapist.availability?.map((s: any) => (
-                  <button key={s.id} onClick={() => setSelSlot(s.id)} className={cls("rounded-xl border-2 p-3 text-left text-sm transition", selSlot === s.id ? "border-teal-600 bg-teal-50" : "border-gray-200 hover:border-teal-300")}>
-                    <p className="font-bold text-gray-900">{dateOnly(s.startsAt)}</p>
-                    <p className="text-gray-500">{timeOnly(s.startsAt)} – {timeOnly(s.endsAt)}</p>
-                    {selSlot === s.id && <span className="text-xs font-bold text-teal-600">Seçildi ✓</span>}
-                  </button>
-                ))}
-                {!therapist.availability?.length && <p className="col-span-3 text-sm text-gray-400">Şu an açık slot yok.</p>}
-              </div>
-            </div>
-
-            {/* Booking summary */}
-            {isPatient && selPackage && selSlot ? (
-              <div className="rounded-xl border-2 border-teal-200 bg-teal-50 p-5">
-                <h3 className="font-black text-teal-900">Randevu Özeti</h3>
-                <div className="mt-3 space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-600">Paket</span><span className="font-bold">{pkg?.name}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-600">Tarih & Saat</span><span className="font-bold">{dateTime(slot?.startsAt)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-600">Mod</span><span className="font-bold">{modeLabel(pkg?.mode || "")}</span></div>
-                  <div className="flex justify-between border-t border-teal-200 pt-2"><span className="font-bold text-gray-700">Toplam</span><span className="font-black text-teal-700">{money(pkg?.price)}</span></div>
-                </div>
-                <Btn onClick={() => run("Randevu talebi gönderiliyor", createAppointment)} className="mt-4 w-full" size="lg">Randevu Talebi Gönder</Btn>
-                <p className="mt-2 text-center text-xs text-gray-400">Ödeme, terapist onayladıktan sonra alınır.</p>
-              </div>
-            ) : isPatient ? (
-              <div className="rounded-xl border border-dashed border-gray-300 p-4 text-center text-sm text-gray-400">
-                {hasPackages && hasSlots ? "Randevu oluşturmak için paket ve slot seçin." : !hasPackages && !hasSlots ? "Bu terapistin henüz paketi veya açık slotu yok. Aşağıdan mesaj göndererek iletişime geçebilirsiniz." : !hasSlots ? "Bu terapistin açık slotu yok. Aşağıdan mesaj göndererek uygun zamanı sorabilirsiniz." : "Paket seçili değil. Aşağıdan mesaj göndererek bilgi alabilirsiniz."}
-              </div>
-            ) : !session ? (
-              <div className="rounded-xl border border-teal-200 bg-teal-50 p-5 text-center"><p className="font-bold text-teal-800">Randevu almak için giriş yapın</p></div>
-            ) : null}
-
             {/* Message request */}
-            {isPatient && (
+            {isPatient ? (
               <div className="rounded-xl border-2 border-teal-200 bg-white p-5">
                 <h3 className="font-black text-gray-900">💬 Mesaj Gönder</h3>
-                <p className="mt-1 text-sm text-gray-500">Terapiste sorunuzu iletin. Terapist talebinizi onayladığında mesaj alanından görüşebilirsiniz.</p>
+                <p className="mt-1 text-sm text-gray-500">İlgilendiğiniz paketi veya sorunuzu terapiste iletin. Terapist talebinizi onayladığında mesaj alanından görüşebilirsiniz.</p>
                 <div className="mt-3 space-y-3">
-                  <Textarea label="" value={messageDraft} onChange={setMessageDraft} placeholder="Merhaba, durumum hakkında bilgi almak istiyorum..." rows={3} />
+                  <Textarea label="" value={messageDraft} onChange={setMessageDraft} placeholder="Merhaba, ... paketi hakkında bilgi almak istiyorum." rows={3} />
                   <Btn onClick={() => run("Mesaj talebi gönderiliyor", startConversation)} variant="primary" className="w-full">Mesaj Talebi Gönder</Btn>
                 </div>
               </div>
-            )}
+            ) : !session ? (
+              <div className="rounded-xl border border-teal-200 bg-teal-50 p-5 text-center"><p className="font-bold text-teal-800">Mesaj göndermek için hasta hesabıyla giriş yapın</p></div>
+            ) : null}
 
             {/* Documents */}
             {therapist.documents?.length > 0 && (
@@ -763,7 +671,7 @@ function AssessmentSection({ questions, setQuestions, request, result, setResult
         <Card className="p-12 text-center">
           <span className="text-6xl">🩺</span>
           <h2 className="mt-4 text-xl font-black">Belirtilerinizi anlayalım</h2>
-          <p className="mt-2 mx-auto max-w-md text-gray-500">8 soruluk test ile size en uygun tedavi türü ve terapist önerisi alın.</p>
+          <p className="mt-2 mx-auto max-w-md text-gray-500">Kısa test ile size en uygun tedavi türü ve terapist önerisi alın.</p>
           <Btn onClick={() => run("Sorular yükleniyor", load)} variant="primary" size="xl" className="mt-6">Teste Başla →</Btn>
         </Card>
       )}
@@ -814,64 +722,8 @@ function AssessmentSection({ questions, setQuestions, request, result, setResult
   );
 }
 
-// ── Appointments ──────────────────────────────────────────────────────────────
-function AppointmentsSection({ session, appointments, run, request, reload }: any) {
-  const [filter, setFilter] = useState<"all"|"active"|"past">("all");
-  if (!session) return <AuthRequired />;
-  const filtered = appointments.filter((a: any) => {
-    if (filter === "active") return ["REQUESTED","CONFIRMED"].includes(a.status);
-    if (filter === "past") return ["COMPLETED","CANCELLED"].includes(a.status);
-    return true;
-  });
-  const tabs = [{ key:"all", label:"Tümü", n:appointments.length }, { key:"active", label:"Aktif", n:appointments.filter((a: any) => ["REQUESTED","CONFIRMED"].includes(a.status)).length }, { key:"past", label:"Geçmiş", n:appointments.filter((a: any) => ["COMPLETED","CANCELLED"].includes(a.status)).length }];
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-4"><h1 className="text-3xl font-black">Randevular</h1><Btn variant="outline" size="sm" onClick={() => run("Yenileniyor", reload)}>↺ Yenile</Btn></div>
-      <div className="flex gap-2 border-b border-gray-200 pb-0">
-        {tabs.map(t => (
-          <button key={t.key} onClick={() => setFilter(t.key as any)} className={cls("flex items-center gap-1.5 rounded-t-lg px-4 py-2 text-sm font-bold transition", filter === t.key ? "bg-teal-700 text-white" : "text-gray-500 hover:text-gray-700")}>
-            {t.label}<span className={cls("rounded-full px-1.5 py-0.5 text-xs", filter === t.key ? "bg-teal-600 text-white" : "bg-gray-200 text-gray-600")}>{t.n}</span>
-          </button>
-        ))}
-      </div>
-      <div className="space-y-4">
-        {filtered.map((a: any) => <AppointmentCard key={a.id} appointment={a} session={session} run={run} request={request} reload={reload} />)}
-        {!filtered.length && <Empty text="Bu kategoride randevu yok." />}
-      </div>
-    </div>
-  );
-}
-
-function AppointmentCard({ appointment: a, session, run, request, reload }: any) {
-  const isPatient = session?.user.role === "PATIENT";
-  const isTherapist = session?.user.role === "THERAPIST";
-  return (
-    <Card className="p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge className={statusBadge(a.status)}>{statusLabel(a.status)}</Badge>
-            {a.payment && <Badge className={statusBadge(a.payment.status)}>Ödeme: {statusLabel(a.payment.status)}</Badge>}
-          </div>
-          <h3 className="text-lg font-black">{isPatient ? a.therapistProfile?.fullName : a.patient?.name}</h3>
-          <div className="space-y-0.5 text-sm text-gray-500">
-            <p>📦 {a.package?.name} · {modeLabel(a.package?.mode || "")}</p>
-            <p>📅 {dateTime(a.slot?.startsAt)}</p>
-            {a.payment && <p>💰 {money(a.payment.amount)}{Number(a.payment.discountAmount) > 0 && <span className="text-green-600"> (-{money(a.payment.discountAmount)})</span>}</p>}
-            {a.videoLink && a.status === "CONFIRMED" && <p>🎥 <a href={a.videoLink} target="_blank" rel="noopener noreferrer" className="font-bold text-teal-600 hover:underline">Görüntülü Bağlantı →</a></p>}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {isPatient && ["REQUESTED","CONFIRMED"].includes(a.status) && <Btn variant="danger" size="sm" onClick={() => run("İptal ediliyor", async () => { await request("/appointments/" + a.id + "/cancel/patient", { method: "PATCH", body: JSON.stringify({ reason: "Hasta talebi" }) }); await reload(); })}>İptal Et</Btn>}
-          {isTherapist && a.status === "CONFIRMED" && <Btn variant="primary" size="sm" onClick={() => run("Tamamlanıyor", async () => { await request("/appointments/" + a.id + "/complete", { method: "PATCH", body: JSON.stringify({}) }); await reload(); })}>Tamamla ✓</Btn>}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
 // ── Messages ──────────────────────────────────────────────────────────────────
-function MessagesSection({ session, request, conversations, loadConversations, activeConversationId, setActiveConversationId, setUnreadMessages, toast }: any) {
+function MessagesSection({ session, request, conversations, loadConversations, activeConversationId, setActiveConversationId, toast }: any) {
   if (!session || session.user.role === "ADMIN") return <AuthRequired text="Mesajlaşma için hasta veya terapist hesabıyla giriş yapın." />;
   const isTherapist = session.user.role === "THERAPIST";
   const [messages, setMessages] = useState<any[]>([]);
@@ -909,7 +761,7 @@ function MessagesSection({ session, request, conversations, loadConversations, a
       } catch {}
     }, 6000);
     return () => clearInterval(timer);
-  }, [selectedId, request, loadConversations, setUnreadMessages]);
+  }, [selectedId, request, loadConversations]);
 
   async function send() {
     const body = draft.trim();
@@ -949,7 +801,7 @@ function MessagesSection({ session, request, conversations, loadConversations, a
           {conversations.length ? conversations.map((c: any) => (
             <button key={c.id} onClick={() => openConversation(c.id)}
               className={cls("flex w-full items-start gap-3 border-b border-gray-100 p-4 text-left transition", selectedId === c.id ? "bg-teal-50" : "hover:bg-gray-50")}>
-              <div className={cls("flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black bg-gradient-to-br", avatarGrad("BRONZE"))}>{initials(other(c))}</div>
+              <div className={cls("flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black bg-gradient-to-br", avatarGrad())}>{initials(other(c))}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <p className="truncate font-bold text-gray-900">{other(c) || "Kullanıcı"}</p>
@@ -1022,121 +874,49 @@ function MessagesSection({ session, request, conversations, loadConversations, a
 }
 
 // ── Therapist Pro ─────────────────────────────────────────────────────────────
-function TherapistProSection({ session, request, run, treatmentTypes, profile, incoming, appointments, reload, toast }: any) {
+function TherapistProSection({ session, request, run, treatmentTypes, profile, conversations, reload, setTab, toast }: any) {
   if (!session || session.user.role !== "THERAPIST") return <AuthRequired text="Terapist paneli için terapist hesabıyla giriş yapın." />;
-  const [sub, setSub] = useState<"dashboard"|"requests"|"packages"|"slots"|"profile">("dashboard");
-  const tabs = [{ key:"dashboard", label:"Genel Bakış" }, { key:"requests", label:"Talepler", badge: incoming.length }, { key:"packages", label:"Paketler" }, { key:"slots", label:"Müsaitlik" }, { key:"profile", label:"Profil" }];
+  const [sub, setSub] = useState<"dashboard"|"packages"|"profile">("dashboard");
+  const pendingRequests = (conversations || []).filter((c: any) => c.status === "PENDING").length;
+  const tabs = [{ key:"dashboard", label:"Genel Bakış" }, { key:"packages", label:"Paketler" }, { key:"profile", label:"Profil" }];
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div><h1 className="text-3xl font-black">FizioTerapi Pro</h1><div className="mt-1 flex items-center gap-2"><Badge className={statusBadge(profile?.status || "PENDING")}>{statusLabel(profile?.status || "PENDING")}</Badge>{profile && <Badge className={tierBadge(profile.loyaltyTier)}>{tierLabel(profile.loyaltyTier)}</Badge>}</div></div>
+        <div><h1 className="text-3xl font-black">FizioTerapi Pro</h1><div className="mt-1 flex items-center gap-2"><Badge className={statusBadge(profile?.status || "PENDING")}>{statusLabel(profile?.status || "PENDING")}</Badge></div></div>
         <Btn variant="outline" size="sm" onClick={() => run("Panel yenileniyor", reload)}>↺ Yenile</Btn>
       </div>
       <div className="flex gap-2 overflow-x-auto border-b border-gray-200 pb-0">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setSub(t.key as any)} className={cls("flex shrink-0 items-center gap-1.5 rounded-t-lg px-4 py-2 text-sm font-bold transition whitespace-nowrap", sub === t.key ? "bg-teal-700 text-white" : "text-gray-500 hover:text-gray-700")}>
-            {t.label}{t.badge ? <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] text-white">{t.badge}</span> : null}
+            {t.label}
           </button>
         ))}
       </div>
-      {sub === "dashboard" && <ProDashboard profile={profile} incoming={incoming} appointments={appointments} run={run} request={request} reload={reload} />}
-      {sub === "requests" && <ProRequests incoming={incoming} run={run} request={request} reload={reload} toast={toast} />}
+      {sub === "dashboard" && <ProDashboard profile={profile} pendingRequests={pendingRequests} setTab={setTab} />}
       {sub === "packages" && <ProPackages profile={profile} treatmentTypes={treatmentTypes} run={run} request={request} reload={reload} />}
-      {sub === "slots" && <ProSlots profile={profile} run={run} request={request} reload={reload} />}
       {sub === "profile" && <ProProfileEdit profile={profile} treatmentTypes={treatmentTypes} run={run} request={request} reload={reload} />}
     </div>
   );
 }
 
-function ProDashboard({ profile, incoming, appointments, run, request, reload }: any) {
-  const confirmed = appointments.filter((a: any) => a.status === "CONFIRMED").length;
-  const completed = appointments.filter((a: any) => a.status === "COMPLETED").length;
-  const earnings = appointments.filter((a: any) => a.status === "COMPLETED" && a.payment?.status === "RELEASED").reduce((s: number, a: any) => s + Number(a.payment?.therapistPayout || 0), 0);
-  const todayStr = new Date().toDateString();
-  const todayAppts = appointments.filter((a: any) => a.slot?.startsAt && new Date(a.slot.startsAt).toDateString() === todayStr && a.status === "CONFIRMED");
+function ProDashboard({ profile, pendingRequests, setTab }: any) {
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Bekleyen Talepler" value={incoming.length} sub="Yanıt bekleniyor" />
-        <Stat label="Onaylı Randevular" value={confirmed} sub="Yaklaşan seanslar" />
-        <Stat label="Tamamlanan Seans" value={completed} />
-        <Stat label="Toplam Kazanç" value={money(earnings)} sub="Aktarılan ödemeler" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Stat label="Bekleyen Mesaj Talebi" value={pendingRequests} sub="Yanıt bekleniyor" />
+        <Stat label="Paketlerim" value={profile?.packages?.length || 0} sub="Aktif paket" />
+        <Stat label="Uzmanlık Alanı" value={profile?.specialties?.length || 0} />
       </div>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="p-5">
-          <h2 className="font-black text-gray-900">Bugünün Programı</h2>
-          {todayAppts.length > 0 ? (
-            <div className="mt-3 space-y-3">
-              {todayAppts.map((a: any) => (
-                <div key={a.id} className="flex items-center gap-3 rounded-xl border border-teal-200 bg-teal-50 p-3">
-                  <div className="min-w-[52px] text-center"><p className="text-lg font-black text-teal-700">{timeOnly(a.slot?.startsAt)}</p><p className="text-xs text-teal-500">{timeOnly(a.slot?.endsAt)}</p></div>
-                  <div className="flex-1 min-w-0"><p className="font-bold text-gray-900 truncate">{a.patient?.name}</p><p className="text-sm text-gray-500">{a.package?.name} · {modeLabel(a.package?.mode || "")}</p></div>
-                  <Btn variant="primary" size="sm" onClick={() => run("Tamamlanıyor", async () => { await request("/appointments/" + a.id + "/complete", { method: "PATCH", body: JSON.stringify({}) }); await reload(); })}>Tamamla</Btn>
-                </div>
-              ))}
-            </div>
-          ) : <p className="mt-3 text-sm text-gray-400">Bugün onaylı randevu yok.</p>}
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center justify-between"><h2 className="font-black text-gray-900">Son Talepler</h2>{incoming.length > 0 && <Badge className="border-red-200 bg-red-50 text-red-700">{incoming.length} bekliyor</Badge>}</div>
-          {incoming.length > 0 ? (
-            <div className="mt-3 space-y-3">
-              {incoming.slice(0, 3).map((a: any) => (
-                <div key={a.id} className="flex items-center gap-3 rounded-xl border border-gray-200 p-3">
-                  <div className="flex-1 min-w-0"><p className="font-bold text-gray-900 truncate">{a.patient?.name}</p><p className="text-sm text-gray-500">{a.package?.name} · {dateTime(a.slot?.startsAt)}</p></div>
-                </div>
-              ))}
-              {incoming.length > 3 && <p className="text-center text-sm text-gray-400">+{incoming.length - 3} daha</p>}
-            </div>
-          ) : <p className="mt-3 text-sm text-gray-400">Bekleyen talep yok.</p>}
-        </Card>
-      </div>
-      {profile && (
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-gray-200 bg-white p-5 text-center shadow-sm"><p className="text-xs font-bold uppercase text-gray-400">Kademe</p><p className="mt-2 text-2xl font-black text-gray-900">{tierLabel(profile.loyaltyTier)}</p><p className="text-sm text-gray-500">Komisyon: %{Math.round(Number(profile.commissionRate) * 100)}</p></div>
-          <div className="rounded-xl border border-gray-200 bg-white p-5 text-center shadow-sm"><p className="text-xs font-bold uppercase text-gray-400">Paketlerim</p><p className="mt-2 text-2xl font-black text-gray-900">{profile.packages?.length || 0}</p><p className="text-sm text-gray-500">Aktif paket</p></div>
-          <div className="rounded-xl border border-gray-200 bg-white p-5 text-center shadow-sm"><p className="text-xs font-bold uppercase text-gray-400">Açık Slotlar</p><p className="mt-2 text-2xl font-black text-gray-900">{profile.availability?.length || 0}</p><p className="text-sm text-gray-500">Rezerve edilebilir</p></div>
+      <Card className="p-6">
+        <h2 className="font-black text-gray-900">Hasta Talepleri</h2>
+        <p className="mt-2 text-sm text-gray-500">Hastalar profilinizden size mesaj gönderir. Gelen talepleri kabul edip mesaj alanında görüşebilirsiniz.</p>
+        <Btn variant="primary" size="md" className="mt-4" onClick={() => setTab("messages")}>Mesajlara Git{pendingRequests > 0 ? ` (${pendingRequests})` : ""} →</Btn>
+      </Card>
+      {profile?.status !== "APPROVED" && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 p-5 text-sm font-semibold text-orange-700">
+          Profiliniz {statusLabel(profile?.status || "PENDING").toLowerCase()}. Paket ve uzmanlık eklemek için önce yönetici onayı gerekir. Profil sekmesinden belgelerinizi yükleyin.
         </div>
       )}
-    </div>
-  );
-}
-
-function ProRequests({ incoming, run, request, reload, toast }: any) {
-  const [videoLinks, setVideoLinks] = useState<Record<string,string>>({});
-  async function confirm(a: any) {
-    const isOnline = ["ONLINE","BOTH"].includes(a.package?.mode);
-    const link = videoLinks[a.id] || "";
-    if (isOnline && !link) { toast("error", "Online seans için toplantı linki girin."); return; }
-    await request("/appointments/" + a.id + "/confirm", { method: "PATCH", body: JSON.stringify({ videoLink: isOnline ? link : undefined }) });
-    await reload();
-  }
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between"><h2 className="text-xl font-black">Gelen Talepler ({incoming.length})</h2></div>
-      {incoming.map((a: any) => {
-        const isOnline = ["ONLINE","BOTH"].includes(a.package?.mode);
-        return (
-          <Card key={a.id} className="p-5">
-            <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
-              <div>
-                <div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-black">{a.patient?.name}</h3><Badge className="border-blue-200 bg-blue-50 text-blue-700">Talep</Badge></div>
-                <div className="mt-2 space-y-1 text-sm text-gray-500">
-                  <p>📦 {a.package?.name} · {modeLabel(a.package?.mode || "")} · {money(a.package?.price)}</p>
-                  <p>📅 {dateTime(a.slot?.startsAt)} – {timeOnly(a.slot?.endsAt)}</p>
-                  <p>👤 {a.patient?.email}</p>
-                </div>
-                {isOnline && <div className="mt-3"><Input label="Görüntülü Toplantı Linki (zorunlu)" value={videoLinks[a.id] || ""} onChange={(v: string) => setVideoLinks(p => ({ ...p, [a.id]: v }))} placeholder="https://meet.google.com/..." /></div>}
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-                <Btn variant="primary" size="md" onClick={() => run("Onaylanıyor", () => confirm(a))}>Onayla ✓</Btn>
-                <Btn variant="danger" size="md" onClick={() => run("Reddediliyor", async () => { await request("/appointments/" + a.id + "/cancel/therapist", { method: "PATCH", body: JSON.stringify({ reason: "Terapist uygun değil." }) }); await reload(); })}>Reddet</Btn>
-              </div>
-            </div>
-          </Card>
-        );
-      })}
-      {!incoming.length && <Empty text="Bekleyen talep yok." />}
     </div>
   );
 }
@@ -1174,50 +954,17 @@ function ProPackages({ profile, treatmentTypes, run, request, reload }: any) {
   );
 }
 
-function ProSlots({ profile, run, request, reload }: any) {
-  const d = new Date(Date.now() + 86400000); d.setHours(9, 0, 0, 0);
-  const d2 = new Date(d); d2.setHours(10, 0, 0, 0);
-  const [startsAt, setStartsAt] = useState(d.toISOString().slice(0, 16));
-  const [endsAt, setEndsAt] = useState(d2.toISOString().slice(0, 16));
-  const slots = profile?.availability || [];
-  return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      <div>
-        <h2 className="mb-4 text-xl font-black">Açık Slotlar ({slots.length})</h2>
-        <div className="space-y-2">
-          {slots.map((s: any) => (
-            <div key={s.id} className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4">
-              <div><p className="font-bold text-gray-900">{dateOnly(s.startsAt)}</p><p className="text-sm text-gray-500">{timeOnly(s.startsAt)} – {timeOnly(s.endsAt)}</p></div>
-              <Btn variant="danger" size="sm" onClick={() => run("Slot siliniyor", async () => { await request("/therapists/me/slots/" + s.id, { method: "DELETE" }); await reload(); })}>Kaldır</Btn>
-            </div>
-          ))}
-          {!slots.length && <Empty text="Henüz açık slot eklemediniz." />}
-        </div>
-      </div>
-      <div>
-        <h2 className="mb-4 text-xl font-black">Slot Ekle</h2>
-        <Card className="p-5 space-y-4">
-          <Input label="Başlangıç" type="datetime-local" value={startsAt} onChange={setStartsAt} />
-          <Input label="Bitiş" type="datetime-local" value={endsAt} onChange={setEndsAt} />
-          <Btn onClick={() => run("Slot ekleniyor", async () => { await request("/therapists/me/slots", { method: "POST", body: JSON.stringify({ startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString() }) }); await reload(); })} variant="primary" className="w-full">Slot Ekle</Btn>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
 function ProProfileEdit({ profile, treatmentTypes, run, request, reload }: any) {
-  const [fullName, setFullName] = useState(profile?.fullName || ""); const [bio, setBio] = useState(profile?.bio || ""); const [city, setCity] = useState(profile?.city || ""); const [specialtyIds, setSpecialtyIds] = useState<string[]>(profile?.specialties?.map((s: any) => s.treatmentTypeId) || []);
-  useEffect(() => { setFullName(profile?.fullName || ""); setBio(profile?.bio || ""); setCity(profile?.city || ""); setSpecialtyIds(profile?.specialties?.map((s: any) => s.treatmentTypeId) || []); }, [profile?.id]);
+  const [fullName, setFullName] = useState(profile?.fullName || ""); const [bio, setBio] = useState(profile?.bio || ""); const [specialtyIds, setSpecialtyIds] = useState<string[]>(profile?.specialties?.map((s: any) => s.treatmentTypeId) || []);
+  useEffect(() => { setFullName(profile?.fullName || ""); setBio(profile?.bio || ""); setSpecialtyIds(profile?.specialties?.map((s: any) => s.treatmentTypeId) || []); }, [profile?.id]);
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="space-y-5">
         <Card className="p-5 space-y-4">
           <h2 className="font-black text-gray-900">Temel Bilgiler</h2>
           <Input label="Ad Soyad" value={fullName} onChange={setFullName} />
-          <Input label="Şehir" value={city} onChange={setCity} placeholder="İstanbul" />
           <Textarea label="Biyografi" value={bio} onChange={setBio} placeholder="Uzmanlık alanlarınız, tecrübeleriniz..." rows={5} />
-          <Btn onClick={() => run("Profil kaydediliyor", async () => { await request("/therapists/me", { method: "PATCH", body: JSON.stringify({ fullName, bio, city }) }); await reload(); })} variant="primary" className="w-full">Profili Kaydet</Btn>
+          <Btn onClick={() => run("Profil kaydediliyor", async () => { await request("/therapists/me", { method: "PATCH", body: JSON.stringify({ fullName, bio }) }); await reload(); })} variant="primary" className="w-full">Profili Kaydet</Btn>
         </Card>
         <Card className="p-5">
           <h2 className="mb-4 font-black text-gray-900">Belgeler</h2>
@@ -1262,10 +1009,9 @@ function AdminSection({ session, request, run, pending, reload }: any) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4"><div><h1 className="text-3xl font-black">Yönetim Paneli</h1><p className="mt-1 text-gray-500">Onay bekleyen: {pending.length} terapist</p></div><Btn variant="outline" size="sm" onClick={() => run("Yenileniyor", reload)}>↺ Yenile</Btn></div>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Stat label="Onay Bekleyen" value={pending.length} sub="İnceleme gerekiyor" />
         <Stat label="Platform" value="Aktif" sub="Tüm sistemler normal" />
-        <Stat label="Ödeme" value="Canlı" sub="iyzico escrow aktif" />
       </div>
       <div>
         <h2 className="mb-4 text-xl font-black">Bekleyen Terapistler</h2>
@@ -1301,15 +1047,7 @@ function AdminSection({ session, request, run, pending, reload }: any) {
 }
 
 // ── Profile ───────────────────────────────────────────────────────────────────
-const NEXT_TIER: Record<string,string> = { BRONZE:"SILVER", SILVER:"GOLD", GOLD:"VIP", VIP:"VIP" };
-const TIER_MIN: Record<string,number> = { BRONZE:0, SILVER:5, GOLD:15, VIP:30 };
-
-function ProfileSection({ session, loyalty, setLoyalty, request, run, setTab }: any) {
-  const tier = loyalty?.loyaltyTier || "BRONZE";
-  const next = NEXT_TIER[tier];
-  const completed = loyalty?.completedAppointments || 0;
-  const cMin = TIER_MIN[tier] || 0; const nMin = TIER_MIN[next] || cMin;
-  const progress = tier === "VIP" ? 100 : Math.min(100, ((completed - cMin) / (nMin - cMin)) * 100);
+function ProfileSection({ session, setTab }: any) {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-black">Profilim</h1>
@@ -1317,42 +1055,28 @@ function ProfileSection({ session, loyalty, setLoyalty, request, run, setTab }: 
         <div className="space-y-5">
           <Card className="p-6">
             <div className="flex items-start gap-4">
-              <div className={cls("flex h-16 w-16 shrink-0 items-center justify-center rounded-xl text-2xl font-black bg-gradient-to-br", avatarGrad(loyalty?.loyaltyTier))}>{initials(session.user.name)}</div>
-              <div><h2 className="text-xl font-black text-gray-900">{session.user.name}</h2><p className="text-sm text-gray-500">{session.user.email}</p><div className="mt-2 flex gap-2"><Badge className={tierBadge(loyalty?.loyaltyTier)}>{tierLabel(loyalty?.loyaltyTier)}</Badge><Badge className="border-gray-200 bg-gray-100 text-gray-600">{roleLabel(session.user.role)}</Badge></div></div>
+              <div className={cls("flex h-16 w-16 shrink-0 items-center justify-center rounded-xl text-2xl font-black bg-gradient-to-br", avatarGrad())}>{initials(session.user.name)}</div>
+              <div><h2 className="text-xl font-black text-gray-900">{session.user.name}</h2><p className="text-sm text-gray-500">{session.user.email}</p><div className="mt-2 flex gap-2"><Badge className="border-gray-200 bg-gray-100 text-gray-600">{roleLabel(session.user.role)}</Badge></div></div>
             </div>
           </Card>
-          {loyalty && (
-            <Card className="p-6">
-              <h2 className="font-black text-gray-900">Sadakat Programı İlerlemesi</h2>
-              <div className="mt-5 space-y-3">
-                <div className="flex items-center justify-between"><span className="text-sm font-bold text-gray-700">Tamamlanan Seans</span><span className="text-sm font-bold text-teal-700">{completed} / {tier === "VIP" ? "VIP" : nMin}</span></div>
-                <div className="h-3 rounded-full bg-gray-200"><div className="h-3 rounded-full bg-gradient-to-r from-teal-500 to-teal-700 transition-all duration-700" style={{ width: progress + "%" }} /></div>
-                {tier !== "VIP" ? <p className="text-xs text-gray-400">{nMin - completed} seans daha → <span className="font-bold text-teal-600">{tierLabel(next)}</span></p> : <p className="text-xs font-bold text-violet-600">En üst kademedsiniz! 🎉</p>}
-              </div>
-            </Card>
-          )}
-          {loyalty && (
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Stat label="Tamamlanan Seans" value={loyalty.completedAppointments} />
-              <Stat label="İptal Kredisi" value={loyalty.cancellationCredits} sub="Ücret alınmadan iptal hakkı" />
-              <Stat label="Sadakat Kademesi" value={tierLabel(loyalty.loyaltyTier)} />
-            </div>
-          )}
-          <Btn variant="outline" size="md" onClick={() => run("Yenileniyor", async () => { setLoyalty(await request("/users/loyalty")); })}>↺ Bilgileri Yenile</Btn>
+          <Card className="p-6">
+            <h2 className="font-black text-gray-900">Nasıl İlerlerim?</h2>
+            <ol className="mt-3 space-y-2 text-sm text-gray-600">
+              <li>1. Terapistler sekmesinden uygun fizyoterapisti bulun.</li>
+              <li>2. Profilinden mesaj göndererek talebinizi iletin.</li>
+              <li>3. Terapist onayladığında Mesajlar sekmesinden görüşün.</li>
+            </ol>
+            <Btn variant="primary" size="md" className="mt-4" onClick={() => setTab("therapists")}>Terapist Bul →</Btn>
+          </Card>
         </div>
         <Card className="p-5 h-fit">
-          <h2 className="font-black text-gray-900">Kademe Avantajları</h2>
-          <div className="mt-4 space-y-3">
-            {[{ t:"BRONZE", l:"Bronz", info:"Platforma erişim", disc:"0%" }, { t:"SILVER", l:"Gümüş", info:"5 seans sonrası", disc:"%5 indirim" }, { t:"GOLD", l:"Altın", info:"15 seans sonrası", disc:"%10 indirim" }, { t:"VIP", l:"VIP", info:"30 seans sonrası", disc:"%15 indirim" }].map(x => (
-              <div key={x.t} className={cls("flex items-center gap-3 rounded-xl border-2 p-3 transition", loyalty?.loyaltyTier === x.t ? "border-teal-600 bg-teal-50" : "border-gray-200")}>
-                <Badge className={tierBadge(x.t)}>{x.l}</Badge>
-                <div className="flex-1 min-w-0"><p className="text-xs text-gray-400">{x.info}</p></div>
-                <span className="shrink-0 text-sm font-black text-teal-700">{x.disc}</span>
-                {loyalty?.loyaltyTier === x.t && <span className="shrink-0 text-teal-600">✓</span>}
-              </div>
-            ))}
+          <h2 className="font-black text-gray-900">Hesap</h2>
+          <div className="mt-4 space-y-3 text-sm">
+            <div className="flex justify-between"><span className="text-gray-400">Ad Soyad</span><span className="font-bold text-gray-700">{session.user.name}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">E-posta</span><span className="font-bold text-gray-700">{session.user.email}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Rol</span><span className="font-bold text-gray-700">{roleLabel(session.user.role)}</span></div>
           </div>
-          <Btn variant="primary" size="md" className="mt-5 w-full" onClick={() => setTab("therapists")}>Terapist Bul →</Btn>
+          <Btn variant="primary" size="md" className="mt-5 w-full" onClick={() => setTab("messages")}>Mesajlarım →</Btn>
         </Card>
       </div>
     </div>

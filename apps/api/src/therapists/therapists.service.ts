@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { AvailabilityStatus, DocumentType, PackageMode, Role, TherapistStatus } from "@fizioterapi/db";
+import { DocumentType, PackageMode, Role, TherapistStatus } from "@fizioterapi/db";
 import { z } from "zod";
 import { PrismaService } from "../prisma.service";
 import { StorageService, UploadableFile } from "../storage/storage.service";
@@ -21,14 +21,6 @@ export const packageSchema = z.object({
   treatmentTypeId: z.string().min(1)
 });
 
-export const slotSchema = z.object({
-  startsAt: z.coerce.date(),
-  endsAt: z.coerce.date()
-}).refine((value) => value.endsAt > value.startsAt, {
-  message: "Bitiş zamanı başlangıç zamanından sonra olmalıdır",
-  path: ["endsAt"]
-});
-
 @Injectable()
 export class TherapistsService {
   constructor(
@@ -45,8 +37,7 @@ export class TherapistsService {
       where: { status: TherapistStatus.APPROVED },
       include: {
         specialties: { include: { treatmentType: true } },
-        packages: { include: { treatmentType: true } },
-        availability: { where: { status: AvailabilityStatus.OPEN }, orderBy: { startsAt: "asc" } }
+        packages: { include: { treatmentType: true } }
       },
       orderBy: { createdAt: "desc" }
     });
@@ -157,40 +148,6 @@ export class TherapistsService {
     return { ok: true };
   }
 
-  async listSlots(userId: string) {
-    const profile = await this.getProfileOrThrow(userId);
-    return this.prisma.availabilitySlot.findMany({
-      where: { therapistProfileId: profile.id },
-      orderBy: { startsAt: "asc" }
-    });
-  }
-
-  async createSlot(userId: string, input: z.infer<typeof slotSchema>) {
-    const profile = await this.requireApprovedProfile(userId);
-    return this.prisma.availabilitySlot.create({
-      data: {
-        therapistProfileId: profile.id,
-        startsAt: input.startsAt,
-        endsAt: input.endsAt,
-        status: AvailabilityStatus.OPEN
-      }
-    });
-  }
-
-  async deleteSlot(userId: string, slotId: string) {
-    const profile = await this.requireApprovedProfile(userId);
-    const slot = await this.prisma.availabilitySlot.findFirst({
-      where: { id: slotId, therapistProfileId: profile.id }
-    });
-
-    if (!slot) {
-      throw new NotFoundException("Slot bulunamadı.");
-    }
-
-    await this.prisma.availabilitySlot.delete({ where: { id: slotId } });
-    return { ok: true };
-  }
-
   private async getOrCreateProfile(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.role !== Role.THERAPIST) {
@@ -208,8 +165,7 @@ export class TherapistsService {
       include: {
         documents: true,
         specialties: { include: { treatmentType: true } },
-        packages: { include: { treatmentType: true } },
-        availability: true
+        packages: { include: { treatmentType: true } }
       }
     });
   }
@@ -225,7 +181,7 @@ export class TherapistsService {
   private async requireApprovedProfile(userId: string) {
     const profile = await this.getProfileOrThrow(userId);
     if (profile.status !== TherapistStatus.APPROVED) {
-      throw new ForbiddenException("Uzmanlık, paket veya slot yönetimi için terapist onayı gerekir.");
+      throw new ForbiddenException("Uzmanlık ve paket yönetimi için terapist onayı gerekir.");
     }
     return profile;
   }

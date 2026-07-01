@@ -19,15 +19,6 @@ export class UsersController {
     return request.user;
   }
 
-  @Get("loyalty")
-  async loyalty(@Req() request: RequestWithUser) {
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: request.user.sub },
-      select: { id: true, email: true, name: true, role: true, loyaltyTier: true, completedAppointments: true, cancellationCredits: true, therapistProfile: { select: { id: true, loyaltyTier: true, completedAppointments: true, commissionRate: true, tier: true, penaltyCount: true } } }
-    });
-    return user;
-  }
-
   @Get("admin-only")
   @Roles(Role.ADMIN)
   adminOnly() {

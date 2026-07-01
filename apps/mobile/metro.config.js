@@ -1,7 +1,7 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const http = require('http');
 
-const apiPrefixes = ['/auth', '/health', '/users', '/therapists', '/payments', '/catalog', '/marketplace', '/assessment', '/appointments', '/admin'];
+const apiPrefixes = ['/auth', '/health', '/users', '/therapists', '/catalog', '/marketplace', '/assessment', '/conversations', '/admin'];
 const config = getDefaultConfig(__dirname);
 const originalEnhanceMiddleware = config.server && config.server.enhanceMiddleware;
 

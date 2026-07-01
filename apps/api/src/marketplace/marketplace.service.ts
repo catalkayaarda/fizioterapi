@@ -23,7 +23,6 @@ type SearchableTherapist = {
   fullName: string;
   bio: string | null;
   city: string | null;
-  tier: number;
   averageRating: number;
   reviewCount: number;
   specialties: unknown[];
@@ -72,7 +71,7 @@ export class MarketplaceService {
 
     return therapists
       .map((therapist) => this.withRating(therapist))
-      .sort((a, b) => b.tier - a.tier || b.averageRating - a.averageRating || b.reviewCount - a.reviewCount);
+      .sort((a, b) => b.averageRating - a.averageRating || b.reviewCount - a.reviewCount);
   }
 
   async getTherapistDetail(therapistId: string) {
@@ -82,8 +81,7 @@ export class MarketplaceService {
         specialties: { include: { treatmentType: true } },
         packages: { include: { treatmentType: true }, orderBy: { price: "asc" } },
         reviews: { orderBy: { createdAt: "desc" } },
-        documents: { orderBy: { createdAt: "desc" } },
-        availability: { where: { status: "OPEN" }, orderBy: { startsAt: "asc" } }
+        documents: { orderBy: { createdAt: "desc" } }
       }
     });
 
@@ -114,7 +112,7 @@ export class MarketplaceService {
   }
 
 
-  private withRating<T extends { reviews: { rating: number }[]; tier: number }>(therapist: T): T & { averageRating: number; reviewCount: number } {
+  private withRating<T extends { reviews: { rating: number }[] }>(therapist: T): T & { averageRating: number; reviewCount: number } {
     const reviewCount = therapist.reviews.length;
     const averageRating = reviewCount
       ? Number((therapist.reviews.reduce((sum, review) => sum + review.rating, 0) / reviewCount).toFixed(2))

@@ -2,7 +2,6 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { TherapistStatus } from "@fizioterapi/db";
 import { z } from "zod";
 import { PrismaService } from "../prisma.service";
-import { PaymentsService } from "../payments/payments.service";
 
 export const reviewSchema = z.object({
   status: z.enum(["APPROVED", "REJECTED"]),
@@ -11,10 +10,7 @@ export const reviewSchema = z.object({
 
 @Injectable()
 export class AdminService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly payments: PaymentsService
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   listPendingTherapists() {
     return this.prisma.therapistProfile.findMany({
@@ -46,7 +42,7 @@ export class AdminService {
       throw new BadRequestException("Terapist reddedilirken ret sebebi zorunludur.");
     }
 
-    const reviewed = await this.prisma.therapistProfile.update({
+    return this.prisma.therapistProfile.update({
       where: { id: therapistId },
       data: {
         status: input.status,
@@ -55,11 +51,5 @@ export class AdminService {
       },
       include: { documents: true, user: { select: { email: true, name: true } } }
     });
-
-    if (input.status === "APPROVED") {
-      return this.payments.createSubMerchantForTherapist(therapistId);
-    }
-
-    return reviewed;
   }
 }
